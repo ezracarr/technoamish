@@ -196,6 +196,8 @@ canvas{display:block;width:100%!important;height:100%!important;position:relativ
 // ║  Architecture: All code is in one <script> block for portability.        ║
 // ║  Serve via any HTTP server (python -m http.server).                      ║
 // ║  WebSocket connections require non-file:// serving.                      ║
+// ║  Deep link: ?npub= / ?house= / #npub= (npub or 64-char hex) → enter        ║
+// ║  that building when it matches VILLAGE_NPUBS (first match if duplicate). ║
 // ╚═══════════════════════════════════════════════════════════════════════════╝
 //
 // ┌─────────────────────────────────────────────────────────────────────────┐
@@ -3802,6 +3804,50 @@ window.addEventListener('pointermove',function(e){
   if(hit)renderer.domElement.style.cursor='pointer';
 });
 
+// Deep link: open directly inside a villager's building (?npub=… or ?house=…, or #npub=…)
+function deepLinkNpubRaw(){
+  var raw='';
+  try{
+    var sp=new URLSearchParams(window.location.search);
+    raw=sp.get('npub')||sp.get('house')||'';
+    if(!raw&&location.hash){
+      var h=location.hash.replace(/^#/,'');
+      if(/^npub=/i.test(h))raw=h.slice(5);
+      else if(/^house=/i.test(h))raw=h.slice(6);
+      else{
+        var hp=new URLSearchParams(h);
+        raw=hp.get('npub')||hp.get('house')||'';
+      }
+    }
+  }catch(e){}
+  if(!raw)return'';
+  try{raw=decodeURIComponent(raw.replace(/\+/g,' '));}catch(e2){}
+  return String(raw).trim();
+}
+function findVillageBuildingByDeepLink(raw){
+  if(!raw)return null;
+  var q=raw.toLowerCase();
+  if(/^[0-9a-f]{64}$/.test(q)){
+    for(var i=0;i<village.length;i++){if(village[i].hex===q)return village[i];}
+    return null;
+  }
+  var fromBech=npubToHex(q);
+  if(fromBech){
+    for(var vi=0;vi<village.length;vi++){if(village[vi].hex===fromBech)return village[vi];}
+  }
+  for(var vj=0;vj<village.length;vj++){
+    var nd=village[vj].npubData;
+    if(nd&&nd.npub&&String(nd.npub).toLowerCase()===q)return village[vj];
+  }
+  return null;
+}
+function tryDeepLinkEnterBuilding(){
+  var key=deepLinkNpubRaw();
+  if(!key)return;
+  var b=findVillageBuildingByDeepLink(key);
+  if(b)enterBuilding(b);
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // §25 RENDER LOOP
 // ═══════════════════════════════════════════════════════════════════════════
@@ -4157,6 +4203,7 @@ function anim(){
   }
   renderer.render(scene,camera);
 }
+tryDeepLinkEnterBuilding();
 anim();
 window.addEventListener('resize',function(){var w=window.innerWidth||800,h=window.innerHeight||600;camera.aspect=w/h;camera.updateProjectionMatrix();renderer.setSize(w,h);});
 </script>
