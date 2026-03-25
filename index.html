@@ -2119,7 +2119,7 @@ function updateGardenNotes(){
     if(gmNotes.length>0){
       var n=gmNotes[i%gmNotes.length];
       gmPlants[i].note=n;
-      gmPlants[i].hitMesh.userData.gmNote=n;
+      if(gmPlants[i].hitBox)gmPlants[i].hitBox.userData.gmNote=n;
       // Update name tag
       var prof=profileCache[n.pubkey];
       var nameStr=prof&&prof.name?prof.name:'GM #'+(i+1);
