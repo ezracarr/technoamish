@@ -2118,8 +2118,9 @@ function updateGardenNotes(){
   for(var i=0;i<gmPlants.length;i++){
     if(gmNotes.length>0){
       var n=gmNotes[i%gmNotes.length];
-      gmPlants[i].note=n;
-      if(gmPlants[i].hitBox)gmPlants[i].hitBox.userData.gmNote=n;
+      var gp=gmPlants[i];if(!gp)continue;
+      gp.note=n;
+      try{if(gp.hitBox&&gp.hitBox.userData)gp.hitBox.userData.gmNote=n;}catch(e){}
       // Update name tag
       var prof=profileCache[n.pubkey];
       var nameStr=prof&&prof.name?prof.name:'GM #'+(i+1);
@@ -2127,8 +2128,8 @@ function updateGardenNotes(){
       var nctx=nlc.getContext('2d');nctx.fillStyle='rgba(0,255,200,0.5)';nctx.font='bold 10px Courier New';
       nctx.fillText(nameStr.substring(0,12),4,18);
       var ntex=new THREE.CanvasTexture(nlc);ntex.minFilter=THREE.LinearFilter;
-      if(gmPlants[i].nameSprite){
-        gmPlants[i].nameSprite.material.map=ntex;gmPlants[i].nameSprite.material.needsUpdate=true;
+      if(gp.nameSprite){
+        gp.nameSprite.material.map=ntex;gp.nameSprite.material.needsUpdate=true;
       }
     }
   }
