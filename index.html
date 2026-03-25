@@ -4169,156 +4169,7 @@ function fetchFrontierProfiles(pks){
 // Start fetching frontier zaps after a delay (let relays connect first)
 setTimeout(fetchFrontierZaps,4000);
 
-// ── Frontier lot hover/click: prompt to zap for unclaimed lots ──
-var frontierRc=new THREE.Raycaster();
-var frontierHovered=-1;
-
-window.addEventListener('pointermove',function(e){
-  if(insideHouse)return;
-  var hitMeshes=frontierLotState.map(function(l){return l.hitMesh;});
-  var mx=(e.clientX/(window.innerWidth||1))*2-1;
-  var my=-(e.clientY/(window.innerHeight||1))*2+1;
-  frontierRc.setFromCamera(new THREE.Vector2(mx,my),camera);
-  var hits=frontierRc.intersectObjects(hitMeshes);
-  if(hits.length>0){
-    var fi=hits[0].object.userData.frontierIdx;
-    if(fi!==undefined&&fi!==frontierHovered){
-      frontierHovered=fi;
-      var lot=frontierLotState[fi];
-      tooltipLocked='frontier';
-      renderer.domElement.style.cursor='pointer';
-      if(lot.claimed){
-        ttC.textContent='\uD83C\uDFE0 Frontier House';ttC.style.color='#00ffcc';
-        ttN.textContent=(lot.ownerName||lot.ownerPubkey.substring(0,16)+'...')+'\'s House';
-        ttD.textContent='Built with a \u26A1 '+(frontierZappers[fi]?frontierZappers[fi].amount:'1000+')+' sat zap';
-        tt.querySelector('.hint').textContent='';
-      }else{
-        ttC.textContent='\u26A1 Frontier Lot — FOR SALE';ttC.style.color='#ff8844';
-        ttN.textContent='Lot #'+(fi+1)+' — Claim This Land!';
-        if(typeof nostrUser!=='undefined'&&nostrUser&&nostrUser.pubkey){
-          ttD.textContent='Click to zap 1000+ sats and build your house here!';
-          tt.querySelector('.hint').textContent='[ CLICK TO CLAIM ]';
-        }else{
-          ttD.textContent='Login with Nostr, then zap 1000+ sats to build your house here';
-          tt.querySelector('.hint').textContent='[ LOGIN FIRST ]';
-        }
-      }
-      tt.style.opacity='1';
-    }
-    tt.style.left=Math.min(e.clientX+15,(window.innerWidth||800)-380)+'px';
-    tt.style.top=Math.min(e.clientY+15,(window.innerHeight||600)-120)+'px';
-  }else if(frontierHovered>=0){
-    frontierHovered=-1;
-    if(tooltipLocked==='frontier'){tooltipLocked=false;tt.style.opacity='0';}
-  }
-});
-
-// Click unclaimed frontier lot: open zap prompt
-window.addEventListener('click',function(e){
-  if(e.target!==renderer.domElement||modalOpen||insideHouse||drMv)return;
-  var hitMeshes=frontierLotState.map(function(l){return l.hitMesh;});
-  var mx=(e.clientX/(window.innerWidth||1))*2-1;
-  var my=-(e.clientY/(window.innerHeight||1))*2+1;
-  frontierRc.setFromCamera(new THREE.Vector2(mx,my),camera);
-  var hits=frontierRc.intersectObjects(hitMeshes);
-  if(hits.length>0){
-    var fi=hits[0].object.userData.frontierIdx;
-    if(fi===undefined)return;
-    var lot=frontierLotState[fi];
-    if(lot.claimed){
-      // Show info about the owner
-      var pk=lot.ownerPubkey;var prof=profileCache[pk];var pImg=profileImgs[pk];
-      var profHtml='';
-      if(pImg&&pImg!=='loading'&&pImg!=='failed')profHtml+='<img src="'+pImg.src+'" alt="">';
-      else profHtml+='<div class="np-initials">'+(pk?pk.substring(0,2).toUpperCase():'??')+'</div>';
-      profHtml+='<div class="np-info"><div class="np-name">'+(lot.ownerName||'Frontier Settler')+'</div>';
-      profHtml+='<div class="np-pk">'+pk.substring(0,32)+'...</div></div>';
-      noteProfile.innerHTML=profHtml;
-      noteContent.textContent='\u26A1 This house was built by zapping 1000+ sats to the frontier note.\n\n'+(lot.ownerName||pk.substring(0,16)+'...')+' claimed Lot #'+(fi+1)+' in the Nostr Frontier!';
-      noteMeta.innerHTML='<span style="color:rgba(0,255,200,.5)">\uD83C\uDFE0 Frontier House \u2022 Lot #'+(fi+1)+'</span>';
-      noteModal.classList.add('open');modalOpen=true;
-    }else{
-      // Unclaimed — prompt to zap
-      if(typeof nostrUser!=='undefined'&&nostrUser&&nostrUser.pubkey&&nostrUser.signer){
-        openFrontierZapPrompt(fi);
-      }else{
-        // Not logged in — open login modal
-        loginModal.classList.add('open');
-        loginStatus.textContent='Login to claim Frontier Lot #'+(fi+1)+'! Zap 1000+ sats to build your house.';
-      }
-    }
-  }
-});
-
-// ── Frontier zap prompt: reuse the zap tree modal with different text ──
-function openFrontierZapPrompt(lotIdx){
-  // Override the zap modal for frontier use
-  var modal=document.getElementById('zap-tree-modal');
-  var title=modal.querySelector('h2');
-  var sub=modal.querySelector('.zt-sub');
-  var sendBtn=document.getElementById('zap-send-btn');
-  var statusEl=document.getElementById('zap-tree-status');
-  var invoiceArea=document.getElementById('zap-invoice-area');
-
-  title.innerHTML='\u26A1 Claim Frontier Lot #'+(lotIdx+1);
-  sub.textContent='Zap the frontier note with 1000+ sats to build your house on this lot! Your house will appear once the zap is confirmed.';
-
-  // Set minimum 1000 sats
-  selectedZapAmt=1000;
-  var amtBtns=document.querySelectorAll('.zap-amt-btn');
-  for(var i=0;i<amtBtns.length;i++)amtBtns[i].classList.remove('selected');
-  // Pre-select the 2.1k button or set custom
-  document.getElementById('zap-custom-amt').value='1000';
-
-  sendBtn.disabled=false;
-  sendBtn.textContent='\u26A1 ZAP TO CLAIM LOT';
-  statusEl.textContent='Minimum 1000 sats to claim this lot';
-  invoiceArea.classList.remove('v');
-
-  // Tag this modal as frontier mode
-  modal.setAttribute('data-frontier-lot',lotIdx);
-
-  modal.classList.add('open');
-}
-
-// Override zap send to handle frontier lots
-var origZapSendHandler=zapSendBtn.onclick;
-zapSendBtn.addEventListener('click',function(e){
-  var modal=document.getElementById('zap-tree-modal');
-  var lotAttr=modal.getAttribute('data-frontier-lot');
-  if(lotAttr!==null&&lotAttr!==''){
-    e.stopImmediatePropagation();
-    var lotIdx=parseInt(lotAttr);
-    var amt=selectedZapAmt||1000;
-    if(amt<FRONTIER_MIN_SATS){
-      document.getElementById('zap-tree-status').textContent='Minimum '+FRONTIER_MIN_SATS+' sats required to claim a lot!';
-      return;
-    }
-    // Clear frontier attribute so the normal zap handler doesn't re-trigger
-    modal.removeAttribute('data-frontier-lot');
-    // Use the normal zap flow but targeting the frontier note
-    zapSendBtn.disabled=true;
-    zapSendBtn.textContent='Connecting...';
-    if(zapTargetCallback){
-      doZap(amt,document.getElementById('zap-comment').value.trim()||'Claiming Frontier Lot #'+(lotIdx+1)+'!');
-    }else{
-      fetchZapEndpoint(function(ok){
-        if(ok)doZap(amt,document.getElementById('zap-comment').value.trim()||'Claiming Frontier Lot #'+(lotIdx+1)+'!');
-        else{zapSendBtn.disabled=false;zapSendBtn.textContent='\u26A1 ZAP TO CLAIM LOT';}
-      });
-    }
-  }
-});
-
-// When the zap tree modal closes, reset frontier mode
-var origZapCloseClick=zapTreeClose.onclick;
-zapTreeClose.addEventListener('click',function(){
-  var modal=document.getElementById('zap-tree-modal');
-  modal.removeAttribute('data-frontier-lot');
-  // Restore normal tree zap labels
-  modal.querySelector('h2').innerHTML='\u26A9 Zap the Village Tree';
-  modal.querySelector('.zt-sub').textContent='Send sats to grow the community tree! Zaps go to the village treasury.';
-});
+// ── Frontier lot hover/click/zap handlers are in §29 (after §28 login/zap system) ──
 
 // ═══════════════════════════════════════════════════════════════════════════
 // §24 BUILDING ENTER/EXIT SYSTEM
@@ -5342,6 +5193,145 @@ zapTreeClose.addEventListener('click',function(){
   if(zapInvoiceArea.classList.contains('v')&&zapSendBtn.textContent.indexOf('ZAPPED')<0){
     onTreeZapSuccess(selectedZapAmt||21);
   }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// §29 FRONTIER LOT INTERACTIONS — hover, click, zap prompt
+//     (Must come after §28 so zapSendBtn, loginModal, nostrUser etc. exist)
+// ═══════════════════════════════════════════════════════════════════════════
+var frontierRc=new THREE.Raycaster();
+var frontierHovered=-1;
+
+window.addEventListener('pointermove',function(e){
+  if(insideHouse)return;
+  var hitMeshes=frontierLotState.map(function(l){return l.hitMesh;});
+  var mx=(e.clientX/(window.innerWidth||1))*2-1;
+  var my=-(e.clientY/(window.innerHeight||1))*2+1;
+  frontierRc.setFromCamera(new THREE.Vector2(mx,my),camera);
+  var hits=frontierRc.intersectObjects(hitMeshes);
+  if(hits.length>0){
+    var fi=hits[0].object.userData.frontierIdx;
+    if(fi!==undefined&&fi!==frontierHovered){
+      frontierHovered=fi;
+      var lot=frontierLotState[fi];
+      tooltipLocked='frontier';
+      renderer.domElement.style.cursor='pointer';
+      if(lot.claimed){
+        ttC.textContent='\uD83C\uDFE0 Frontier House';ttC.style.color='#00ffcc';
+        ttN.textContent=(lot.ownerName||lot.ownerPubkey.substring(0,16)+'...')+'\'s House';
+        ttD.textContent='Built with a \u26A1 '+(frontierZappers[fi]?frontierZappers[fi].amount:'1000+')+' sat zap';
+        tt.querySelector('.hint').textContent='';
+      }else{
+        ttC.textContent='\u26A1 Frontier Lot \u2014 FOR SALE';ttC.style.color='#ff8844';
+        ttN.textContent='Lot #'+(fi+1)+' \u2014 Claim This Land!';
+        if(nostrUser&&nostrUser.pubkey){
+          ttD.textContent='Click to zap 1000+ sats and build your house here!';
+          tt.querySelector('.hint').textContent='[ CLICK TO CLAIM ]';
+        }else{
+          ttD.textContent='Login with Nostr, then zap 1000+ sats to build your house here';
+          tt.querySelector('.hint').textContent='[ LOGIN FIRST ]';
+        }
+      }
+      tt.style.opacity='1';
+    }
+    tt.style.left=Math.min(e.clientX+15,(window.innerWidth||800)-380)+'px';
+    tt.style.top=Math.min(e.clientY+15,(window.innerHeight||600)-120)+'px';
+  }else if(frontierHovered>=0){
+    frontierHovered=-1;
+    if(tooltipLocked==='frontier'){tooltipLocked=false;tt.style.opacity='0';}
+  }
+});
+
+// Click unclaimed frontier lot: open zap prompt
+window.addEventListener('click',function(e){
+  if(e.target!==renderer.domElement||modalOpen||insideHouse||drMv)return;
+  var hitMeshes=frontierLotState.map(function(l){return l.hitMesh;});
+  var mx=(e.clientX/(window.innerWidth||1))*2-1;
+  var my=-(e.clientY/(window.innerHeight||1))*2+1;
+  frontierRc.setFromCamera(new THREE.Vector2(mx,my),camera);
+  var hits=frontierRc.intersectObjects(hitMeshes);
+  if(hits.length>0){
+    var fi=hits[0].object.userData.frontierIdx;
+    if(fi===undefined)return;
+    var lot=frontierLotState[fi];
+    if(lot.claimed){
+      // Show info about the owner
+      var pk=lot.ownerPubkey;var prof=profileCache[pk];var pImg=profileImgs[pk];
+      var profHtml='';
+      if(pImg&&pImg!=='loading'&&pImg!=='failed')profHtml+='<img src="'+pImg.src+'" alt="">';
+      else profHtml+='<div class="np-initials">'+(pk?pk.substring(0,2).toUpperCase():'??')+'</div>';
+      profHtml+='<div class="np-info"><div class="np-name">'+(lot.ownerName||'Frontier Settler')+'</div>';
+      profHtml+='<div class="np-pk">'+pk.substring(0,32)+'...</div></div>';
+      noteProfile.innerHTML=profHtml;
+      noteContent.textContent='\u26A1 This house was built by zapping 1000+ sats to the frontier note.\n\n'+(lot.ownerName||pk.substring(0,16)+'...')+' claimed Lot #'+(fi+1)+' in the Nostr Frontier!';
+      noteMeta.innerHTML='<span style="color:rgba(0,255,200,.5)">\uD83C\uDFE0 Frontier House \u2022 Lot #'+(fi+1)+'</span>';
+      noteModal.classList.add('open');modalOpen=true;
+    }else{
+      // Unclaimed — prompt to zap
+      if(nostrUser&&nostrUser.pubkey&&nostrUser.signer){
+        openFrontierZapPrompt(fi);
+      }else{
+        loginModal.classList.add('open');
+        loginStatus.textContent='Login to claim Frontier Lot #'+(fi+1)+'! Zap 1000+ sats to build your house.';
+      }
+    }
+  }
+});
+
+function openFrontierZapPrompt(lotIdx){
+  var modal=document.getElementById('zap-tree-modal');
+  var title=modal.querySelector('h2');
+  var sub=modal.querySelector('.zt-sub');
+
+  title.innerHTML='\u26A1 Claim Frontier Lot #'+(lotIdx+1);
+  sub.textContent='Zap the frontier note with 1000+ sats to build your house on this lot! Your house will appear once the zap is confirmed.';
+
+  selectedZapAmt=1000;
+  var amtBtns=document.querySelectorAll('.zap-amt-btn');
+  for(var i=0;i<amtBtns.length;i++)amtBtns[i].classList.remove('selected');
+  document.getElementById('zap-custom-amt').value='1000';
+
+  zapSendBtn.disabled=false;
+  zapSendBtn.textContent='\u26A1 ZAP TO CLAIM LOT';
+  zapTreeStatus.textContent='Minimum 1000 sats to claim this lot';
+  zapInvoiceArea.classList.remove('v');
+
+  modal.setAttribute('data-frontier-lot',String(lotIdx));
+  modal.classList.add('open');
+}
+
+// Override zap send to handle frontier lots
+zapSendBtn.addEventListener('click',function(e){
+  var modal=document.getElementById('zap-tree-modal');
+  var lotAttr=modal.getAttribute('data-frontier-lot');
+  if(lotAttr!==null&&lotAttr!==''){
+    e.stopImmediatePropagation();
+    var lotIdx=parseInt(lotAttr);
+    var amt=selectedZapAmt||1000;
+    if(amt<FRONTIER_MIN_SATS){
+      zapTreeStatus.textContent='Minimum '+FRONTIER_MIN_SATS+' sats required to claim a lot!';
+      return;
+    }
+    modal.removeAttribute('data-frontier-lot');
+    zapSendBtn.disabled=true;
+    zapSendBtn.textContent='Connecting...';
+    if(zapTargetCallback){
+      doZap(amt,document.getElementById('zap-comment').value.trim()||'Claiming Frontier Lot #'+(lotIdx+1)+'!');
+    }else{
+      fetchZapEndpoint(function(ok){
+        if(ok)doZap(amt,document.getElementById('zap-comment').value.trim()||'Claiming Frontier Lot #'+(lotIdx+1)+'!');
+        else{zapSendBtn.disabled=false;zapSendBtn.textContent='\u26A1 ZAP TO CLAIM LOT';}
+      });
+    }
+  }
+});
+
+// When zap tree modal closes, reset frontier mode
+zapTreeClose.addEventListener('click',function(){
+  var modal=document.getElementById('zap-tree-modal');
+  modal.removeAttribute('data-frontier-lot');
+  modal.querySelector('h2').innerHTML='\u26A9 Zap the Village Tree';
+  modal.querySelector('.zt-sub').textContent='Send sats to grow the community tree! Zaps go to the village treasury.';
 });
 
 </script>
