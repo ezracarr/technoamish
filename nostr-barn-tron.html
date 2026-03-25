@@ -3844,57 +3844,481 @@ function createFrameBuilding(wx,wz,w,d,h,progress,label){
   scene.add(fg);
 }
 
-// Plots along the riverside road (at various river t-positions)
-var rsPlots=[
-  {t:0.12,progress:0.85,w:7,d:6,h:4,label:'Riverside Cottage #1'},
-  {t:0.18,progress:0.55,w:8,d:7,h:4.5,label:'River Workshop'},
-  {t:0.35,progress:0.3,w:7,d:6,h:4,label:'Fisher\'s House'},
-  {t:0.55,progress:0.7,w:9,d:7,h:5,label:'Riverside Inn'},
-  {t:0.62,progress:0.15,w:7,d:6,h:4,label:'Plot #5'},
-  {t:0.72,progress:0,w:8,d:7,h:4,label:'Plot #6 — FOR SALE'},
-  {t:0.78,progress:0.45,w:7,d:6,h:4,label:'Carpenter\'s Shop'},
-  {t:0.85,progress:0,w:9,d:8,h:5,label:'Plot #8 — FOR SALE'},
-  {t:0.92,progress:0,w:7,d:6,h:4,label:'Plot #9 — FOR SALE'},
-];
-for(var rpi=0;rpi<rsPlots.length;rpi++){
-  var rpl=rsPlots[rpi];
-  var rpp=sampleRiver(rpl.t);var rpn=riverNormal(rpl.t);
-  var plotX=rpp.x-rpn.x*(riverW/2+14);
-  var plotZ=rpp.z-rpn.z*(riverW/2+14);
-  createFrameBuilding(plotX,plotZ,rpl.w,rpl.d,rpl.h,rpl.progress,rpl.label);
-}
+// ═══════════════════════════════════════════════════════════════════════════
+// §23 FRONTIER LOTS — 12 claimable lots across the river
+//     Zap note 5af36a5ec78a476ff... with ≥1000 sats → your house gets built
+//     Fetches kind:9735 zap receipts, oldest 12 qualifying zappers get houses
+// ═══════════════════════════════════════════════════════════════════════════
+var FRONTIER_NOTE_ID='5af36a5ec78a476ff878f5da50dc30cb5b085a3234186fe28f79540851f4a3c5';
+var FRONTIER_NOTE_PUBKEY='bbf94c83c69f7334ffdaed550a9729b94347d22b050a213336a818c2620d6243';
+var FRONTIER_MIN_SATS=1000;
+var FRONTIER_MAX_LOTS=12;
 
-// Empty plots (just stakes in the ground with signs)
-function createEmptyPlot(wx,wz,w,d,label){
-  var pg=new THREE.Group();pg.position.set(wx,0,wz);
+// 12 lot definitions along the riverside road
+var frontierLots=[
+  {t:0.08,w:7,d:6,h:4,label:'Frontier Lot #1'},
+  {t:0.15,w:8,d:7,h:4.5,label:'Frontier Lot #2'},
+  {t:0.22,w:7,d:6,h:4,label:'Frontier Lot #3'},
+  {t:0.30,w:9,d:7,h:5,label:'Frontier Lot #4'},
+  {t:0.38,w:7,d:6,h:4,label:'Frontier Lot #5'},
+  {t:0.46,w:8,d:7,h:4.5,label:'Frontier Lot #6'},
+  {t:0.55,w:7,d:6,h:4,label:'Frontier Lot #7'},
+  {t:0.63,w:9,d:8,h:5,label:'Frontier Lot #8'},
+  {t:0.71,w:7,d:6,h:4,label:'Frontier Lot #9'},
+  {t:0.78,w:8,d:7,h:4.5,label:'Frontier Lot #10'},
+  {t:0.85,w:7,d:6,h:4,label:'Frontier Lot #11'},
+  {t:0.92,w:8,d:7,h:4,label:'Frontier Lot #12'},
+];
+
+// Track lot state: {group, wx, wz, claimed, ownerPubkey, ownerName, hitMesh, labelSprite, labelCanvas, labelTex}
+var frontierLotState=[];
+
+// Build all 12 lots as unclaimed (frame buildings / empty plots)
+for(var fli=0;fli<frontierLots.length;fli++){
+  var fl=frontierLots[fli];
+  var fpp=sampleRiver(fl.t);var fpn=riverNormal(fl.t);
+  // Alternate between closer (14) and further (20) from river for variety
+  var dist=fli%2===0?14:20;
+  var plotX=fpp.x-fpn.x*(riverW/2+dist);
+  var plotZ=fpp.z-fpn.z*(riverW/2+dist);
+
+  var fg=new THREE.Group();fg.position.set(plotX,0,plotZ);
+  var w=fl.w,d=fl.d,h=fl.h;
+
+  // Foundation
+  var found=new THREE.Mesh(new THREE.BoxGeometry(w+0.5,0.15,d+0.5),frameSolid.clone());
+  found.position.y=0.08;
+  found.add(new THREE.LineSegments(new THREE.EdgesGeometry(found.geometry,15),frameMat.clone()));fg.add(found);
+
   // Corner stakes
   for(var cx=-1;cx<=1;cx+=2){for(var cz=-1;cz<=1;cz+=2){
-    var stake=new THREE.Mesh(new THREE.BoxGeometry(0.08,0.8,0.08),frameSolid.clone());
-    stake.position.set(cx*w/2,0.4,cz*d/2);
+    var stake=new THREE.Mesh(new THREE.BoxGeometry(0.1,1.2,0.1),frameSolid.clone());
+    stake.position.set(cx*w/2,0.6,cz*d/2);
     stake.add(new THREE.LineSegments(new THREE.EdgesGeometry(stake.geometry,15),
       new THREE.LineBasicMaterial({color:0xff8844,transparent:true,opacity:0.4})));
-    pg.add(stake);
+    fg.add(stake);
   }}
-  // String between stakes
-  var stringPts=[new THREE.Vector3(-w/2,0.7,-d/2),new THREE.Vector3(w/2,0.7,-d/2),
-    new THREE.Vector3(w/2,0.7,d/2),new THREE.Vector3(-w/2,0.7,d/2),new THREE.Vector3(-w/2,0.7,-d/2)];
-  pg.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(stringPts),
+
+  // String outline
+  var stringPts=[new THREE.Vector3(-w/2,1,-d/2),new THREE.Vector3(w/2,1,-d/2),
+    new THREE.Vector3(w/2,1,d/2),new THREE.Vector3(-w/2,1,d/2),new THREE.Vector3(-w/2,1,-d/2)];
+  fg.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(stringPts),
     new THREE.LineBasicMaterial({color:0xff6600,transparent:true,opacity:0.2})));
-  // Sign
-  var sc=document.createElement('canvas');sc.width=256;sc.height=64;
-  var sctx=sc.getContext('2d');sctx.fillStyle='#ff8844';sctx.font='bold 14px Courier New';sctx.fillText(label,10,25);
-  sctx.fillStyle='rgba(255,136,0,0.4)';sctx.font='11px Courier New';sctx.fillText('Build your nostr house here',10,48);
-  var stex=new THREE.CanvasTexture(sc);stex.minFilter=THREE.LinearFilter;
-  var sspr=new THREE.Sprite(new THREE.SpriteMaterial({map:stex,transparent:true,opacity:0.75}));
-  sspr.scale.set(6,1.4,1);sspr.position.set(0,2,0);pg.add(sspr);
-  scene.add(pg);
+
+  // Scattered building materials
+  for(var si=0;si<2;si++){
+    var slab=new THREE.Mesh(new THREE.BoxGeometry(1.2+Math.random(),0.12,0.3+Math.random()*0.2),frameSolid.clone());
+    slab.position.set(w/2+1+Math.random()*1.5,si*0.13,Math.random()*d-d/2);slab.rotation.y=Math.random()*0.3;
+    slab.add(new THREE.LineSegments(new THREE.EdgesGeometry(slab.geometry,15),frameMat.clone()));fg.add(slab);
+  }
+
+  // Label sprite (will be updated when claimed)
+  var flc=document.createElement('canvas');flc.width=512;flc.height=64;
+  var flctx=flc.getContext('2d');
+  flctx.fillStyle='#ff8844';flctx.font='bold 16px Courier New';flctx.fillText(fl.label,10,24);
+  flctx.fillStyle='rgba(255,136,0,0.45)';flctx.font='12px Courier New';
+  flctx.fillText('\u26A1 Zap 1000+ sats to claim this lot!',10,48);
+  var fltex=new THREE.CanvasTexture(flc);fltex.minFilter=THREE.LinearFilter;
+  var flspr=new THREE.Sprite(new THREE.SpriteMaterial({map:fltex,transparent:true,opacity:0.75}));
+  flspr.scale.set(10,1.2,1);flspr.position.set(0,3,0);fg.add(flspr);
+
+  // Hit mesh for hover/click detection
+  var hitGeo=new THREE.BoxGeometry(w+2,h+2,d+2);
+  var hitMesh=new THREE.Mesh(hitGeo,new THREE.MeshBasicMaterial({transparent:true,opacity:0}));
+  hitMesh.position.set(0,(h+2)/2,0);hitMesh.userData={frontierIdx:fli};
+  fg.add(hitMesh);
+
+  scene.add(fg);
+  frontierLotState.push({
+    group:fg,wx:plotX,wz:plotZ,w:w,d:d,h:h,
+    claimed:false,ownerPubkey:null,ownerName:null,
+    hitMesh:hitMesh,labelSprite:flspr,labelCanvas:flc,labelTex:fltex,
+    lotData:fl
+  });
 }
-// A few more empty plots further along the river
-for(var epi=0;epi<3;epi++){
-  var ept=0.08+epi*0.35;
-  var epp=sampleRiver(ept);var epn=riverNormal(ept);
-  createEmptyPlot(epp.x-epn.x*(riverW/2+22),epp.z-epn.z*(riverW/2+22),8,7,'Riverside Lot '+(epi+10));
+
+// ── Fetch zap receipts for the frontier note ──
+var frontierZapsFetched=false;
+var frontierZappers=[]; // [{pubkey,amount,created_at}] sorted oldest first
+
+function fetchFrontierZaps(){
+  if(frontierZapsFetched)return;frontierZapsFetched=true;
+  console.log('[Frontier] Fetching zap receipts for note '+FRONTIER_NOTE_ID.substring(0,16)+'...');
+  try{
+    var ws=new WebSocket('wss://relay.primal.net');
+    var zapEvents=[];
+    ws.onopen=function(){
+      ws.send(JSON.stringify(["REQ","frzaps",{kinds:[9735],"#e":[FRONTIER_NOTE_ID],limit:100}]));
+    };
+    ws.onmessage=function(e){
+      try{var m=JSON.parse(e.data);
+        if(m[0]==="EVENT"&&m[2]&&m[2].kind===9735){
+          zapEvents.push(m[2]);
+        }
+        if(m[0]==="EOSE"&&m[1]==="frzaps"){
+          ws.send(JSON.stringify(["CLOSE","frzaps"]));ws.close();
+          processFrontierZaps(zapEvents);
+        }
+      }catch(ee){}
+    };
+    ws.onerror=function(){
+      console.log('[Frontier] Relay connection failed, trying fallback...');
+      // Try a second relay
+      try{
+        var ws2=new WebSocket('wss://relay.damus.io');
+        ws2.onopen=function(){ws2.send(JSON.stringify(["REQ","frzaps",{kinds:[9735],"#e":[FRONTIER_NOTE_ID],limit:100}]));};
+        ws2.onmessage=function(e){
+          try{var m=JSON.parse(e.data);
+            if(m[0]==="EVENT"&&m[2]&&m[2].kind===9735)zapEvents.push(m[2]);
+            if(m[0]==="EOSE"){ws2.send(JSON.stringify(["CLOSE","frzaps"]));ws2.close();processFrontierZaps(zapEvents);}
+          }catch(ee){}
+        };
+      }catch(ee2){}
+    };
+  }catch(ee){console.log('[Frontier] Error: '+ee);}
 }
+
+function processFrontierZaps(zapEvents){
+  console.log('[Frontier] Processing '+zapEvents.length+' zap receipt events');
+  var qualifying=[];
+  for(var zi=0;zi<zapEvents.length;zi++){
+    var evt=zapEvents[zi];
+    var tags=evt.tags||[];
+    var senderPubkey=null;var amount=0;var createdAt=evt.created_at||0;
+
+    // Extract sender from description tag (the original kind:9734 zap request)
+    for(var ti=0;ti<tags.length;ti++){
+      if(tags[ti][0]==='description'){
+        try{
+          var desc=JSON.parse(tags[ti][1]);
+          senderPubkey=desc.pubkey||null;
+          // Get amount from the zap request tags
+          var descTags=desc.tags||[];
+          for(var dti=0;dti<descTags.length;dti++){
+            if(descTags[dti][0]==='amount'){
+              amount=Math.floor(parseInt(descTags[dti][1])/1000); // msats → sats
+            }
+          }
+        }catch(pe){}
+      }
+      // Fallback: try bolt11 for amount
+      if(tags[ti][0]==='bolt11'&&amount===0){
+        try{
+          var b11=tags[ti][1];
+          // Parse lnbc amount: lnbc<amount><multiplier>
+          var amtMatch=b11.match(/^lnbc(\d+)([munp]?)/i);
+          if(amtMatch){
+            var raw=parseInt(amtMatch[1]);var mult=amtMatch[2]||'';
+            if(mult==='m')amount=raw*100000; // milli-btc → sats (×100,000)
+            else if(mult==='u')amount=raw*100; // micro-btc → sats (×100)
+            else if(mult==='n')amount=Math.floor(raw/10); // nano-btc → sats (÷10)
+            else if(mult==='p')amount=Math.floor(raw/10000); // pico-btc → sats (÷10000)
+            else amount=raw*100000000; // btc → sats
+          }
+        }catch(be){}
+      }
+      // Also try P tag for sender as fallback
+      if(tags[ti][0]==='P'&&!senderPubkey){senderPubkey=tags[ti][1];}
+    }
+
+    if(senderPubkey&&amount>=FRONTIER_MIN_SATS){
+      // Deduplicate: only first zap per sender
+      var dup=false;
+      for(var qi=0;qi<qualifying.length;qi++){
+        if(qualifying[qi].pubkey===senderPubkey){dup=true;break;}
+      }
+      if(!dup){
+        qualifying.push({pubkey:senderPubkey,amount:amount,created_at:createdAt});
+        console.log('[Frontier] Qualifying zap: '+senderPubkey.substring(0,16)+'... '+amount+' sats');
+      }
+    }
+  }
+
+  // Sort by oldest first (lowest created_at)
+  qualifying.sort(function(a,b){return a.created_at-b.created_at;});
+
+  // Take up to FRONTIER_MAX_LOTS
+  frontierZappers=qualifying.slice(0,FRONTIER_MAX_LOTS);
+  console.log('[Frontier] '+frontierZappers.length+' qualifying zappers (of '+qualifying.length+' total)');
+
+  // Claim lots for qualifying zappers
+  for(var ci=0;ci<frontierZappers.length;ci++){
+    claimFrontierLot(ci,frontierZappers[ci]);
+  }
+
+  // Fetch profiles for all zappers
+  if(frontierZappers.length>0){
+    var pks=frontierZappers.map(function(z){return z.pubkey;});
+    fetchFrontierProfiles(pks);
+  }
+}
+
+function claimFrontierLot(lotIdx,zapper){
+  if(lotIdx>=frontierLotState.length)return;
+  var lot=frontierLotState[lotIdx];
+  lot.claimed=true;
+  lot.ownerPubkey=zapper.pubkey;
+
+  console.log('[Frontier] Claiming lot '+lotIdx+' for '+zapper.pubkey.substring(0,16)+'...');
+
+  // Remove the old frame building contents
+  while(lot.group.children.length>0){lot.group.remove(lot.group.children[0]);}
+
+  // Build a completed house
+  var w=lot.w,d=lot.d,h=lot.h,R=h+2;
+  var bMat=new THREE.MeshStandardMaterial({color:0x101025,roughness:0.35,metalness:0.5,emissive:0x00cccc,emissiveIntensity:0.04});
+  var bEdge=new THREE.LineBasicMaterial({color:0x00cccc,transparent:true,opacity:0.55});
+  function lotBox(bw,bh,bd,bx,by,bz){
+    var g=new THREE.BoxGeometry(bw,bh,bd);var m=new THREE.Mesh(g,bMat.clone());
+    m.position.set(bx,by,bz);
+    m.add(new THREE.LineSegments(new THREE.EdgesGeometry(g,15),bEdge.clone()));
+    lot.group.add(m);return m;
+  }
+
+  // Walls
+  lotBox(w,h,0.15, 0,h/2,-d/2);
+  lotBox(w,h,0.15, 0,h/2,d/2);
+  lotBox(0.15,h,d, -w/2,h/2,0);
+  lotBox(0.15,h,d, w/2,h/2,0);
+  // Floor
+  lotBox(w,0.1,d, 0,0.05,0);
+  // Door frame
+  lotBox(1.6,2.6,0.06, 0,1.3,-d/2-0.08);
+  // Windows
+  for(var wxi=-1;wxi<=1;wxi+=2){
+    var wn=new THREE.Mesh(new THREE.BoxGeometry(1,0.8,0.06),new THREE.MeshStandardMaterial({color:0x101025,emissive:0x00aacc,emissiveIntensity:0.1}));
+    wn.position.set(wxi*(w*0.32),h*0.6,-d/2-0.06);
+    wn.add(new THREE.LineSegments(new THREE.EdgesGeometry(wn.geometry,15),new THREE.LineBasicMaterial({color:0x00ffcc,transparent:true,opacity:0.5})));
+    lot.group.add(wn);
+  }
+  // Roof
+  var rAng=Math.atan2(R-h,w/2);var rLen=Math.sqrt((R-h)*(R-h)+(w/2)*(w/2));
+  for(var ri=0;ri<2;ri++){
+    var rg=new THREE.BoxGeometry(rLen,0.08,d+0.4);
+    var rm=new THREE.Mesh(rg,bMat.clone());
+    rm.position.set((ri===0?-1:1)*w/4,(h+R)/2,0);rm.rotation.z=(ri===0?1:-1)*rAng;
+    rm.add(new THREE.LineSegments(new THREE.EdgesGeometry(rg,15),bEdge.clone()));lot.group.add(rm);
+  }
+  // Gables
+  var gs=new THREE.Shape();gs.moveTo(-w/2,h);gs.lineTo(0,R);gs.lineTo(w/2,h);gs.closePath();
+  for(var gi=-1;gi<=1;gi+=2){
+    var gm=new THREE.Mesh(new THREE.ShapeGeometry(gs),new THREE.MeshStandardMaterial({color:0x0c0c20,emissive:0x001122,emissiveIntensity:0.06,side:THREE.DoubleSide}));
+    gm.position.z=gi*d/2;
+    gm.add(new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.ShapeGeometry(gs),1),new THREE.LineBasicMaterial({color:0x00cccc,transparent:true,opacity:0.3})));
+    lot.group.add(gm);
+  }
+  // Chimney
+  lotBox(0.5,2,0.5, w*0.25,R+0.2,d*0.2);
+  // Fireplace glow
+  var fLight=new THREE.PointLight(0xff6622,0.12,w);fLight.position.set(0,h*0.3,d/2-0.5);lot.group.add(fLight);
+
+  // Re-add hit mesh
+  var hitGeo=new THREE.BoxGeometry(w+2,R+2,d+2);
+  var hitMesh=new THREE.Mesh(hitGeo,new THREE.MeshBasicMaterial({transparent:true,opacity:0}));
+  hitMesh.position.set(0,(R+2)/2,0);hitMesh.userData={frontierIdx:lotIdx};
+  lot.group.add(hitMesh);lot.hitMesh=hitMesh;
+
+  // Label (will be updated when profile loads)
+  var flc=document.createElement('canvas');flc.width=512;flc.height=64;
+  var flctx=flc.getContext('2d');
+  flctx.fillStyle='#00ffcc';flctx.font='bold 16px Courier New';
+  flctx.fillText(zapper.pubkey.substring(0,16)+'...\'s House',10,24);
+  flctx.fillStyle='rgba(0,255,200,0.4)';flctx.font='12px Courier New';
+  flctx.fillText('\u26A1 Zapped '+zapper.amount+' sats to claim',10,48);
+  var fltex=new THREE.CanvasTexture(flc);fltex.minFilter=THREE.LinearFilter;
+  var flspr=new THREE.Sprite(new THREE.SpriteMaterial({map:fltex,transparent:true,opacity:0.75}));
+  flspr.scale.set(10,1.2,1);flspr.position.set(0,R+1.5,0);lot.group.add(flspr);
+  lot.labelSprite=flspr;lot.labelCanvas=flc;lot.labelTex=fltex;
+}
+
+function fetchFrontierProfiles(pks){
+  try{
+    var ws=new WebSocket('wss://relay.primal.net');
+    ws.onopen=function(){ws.send(JSON.stringify(["REQ","frprof",{kinds:[0],authors:pks}]));};
+    ws.onmessage=function(e){
+      try{var m=JSON.parse(e.data);
+        if(m[0]==="EVENT"&&m[2]&&m[2].kind===0){
+          var pk=m[2].pubkey;
+          try{
+            var p=JSON.parse(m[2].content);
+            profileCache[pk]={name:p.name||p.display_name||'',picture:p.picture||''};
+            if(p.picture)loadProfileImg(pk,p.picture);
+            // Update lot label with real name
+            for(var li=0;li<frontierLotState.length;li++){
+              var lot=frontierLotState[li];
+              if(lot.claimed&&lot.ownerPubkey===pk){
+                lot.ownerName=p.name||p.display_name||'';
+                var ctx=lot.labelCanvas.getContext('2d');
+                ctx.clearRect(0,0,512,64);
+                ctx.fillStyle='#00ffcc';ctx.font='bold 16px Courier New';
+                ctx.fillText((lot.ownerName||pk.substring(0,12))+'\'s House',10,24);
+                ctx.fillStyle='rgba(0,255,200,0.4)';ctx.font='12px Courier New';
+                var zapper=null;for(var zi=0;zi<frontierZappers.length;zi++){if(frontierZappers[zi].pubkey===pk)zapper=frontierZappers[zi];}
+                ctx.fillText('\u26A1 Zapped '+(zapper?zapper.amount:'1000+')+' sats to build',10,48);
+                lot.labelTex.needsUpdate=true;
+              }
+            }
+          }catch(pe){}
+        }
+        if(m[0]==="EOSE"){ws.send(JSON.stringify(["CLOSE","frprof"]));ws.close();}
+      }catch(ee){}
+    };
+  }catch(ee){}
+}
+
+// Start fetching frontier zaps after a delay (let relays connect first)
+setTimeout(fetchFrontierZaps,4000);
+
+// ── Frontier lot hover/click: prompt to zap for unclaimed lots ──
+var frontierRc=new THREE.Raycaster();
+var frontierHovered=-1;
+
+window.addEventListener('pointermove',function(e){
+  if(insideHouse)return;
+  var hitMeshes=frontierLotState.map(function(l){return l.hitMesh;});
+  var mx=(e.clientX/(window.innerWidth||1))*2-1;
+  var my=-(e.clientY/(window.innerHeight||1))*2+1;
+  frontierRc.setFromCamera(new THREE.Vector2(mx,my),camera);
+  var hits=frontierRc.intersectObjects(hitMeshes);
+  if(hits.length>0){
+    var fi=hits[0].object.userData.frontierIdx;
+    if(fi!==undefined&&fi!==frontierHovered){
+      frontierHovered=fi;
+      var lot=frontierLotState[fi];
+      tooltipLocked='frontier';
+      renderer.domElement.style.cursor='pointer';
+      if(lot.claimed){
+        ttC.textContent='\uD83C\uDFE0 Frontier House';ttC.style.color='#00ffcc';
+        ttN.textContent=(lot.ownerName||lot.ownerPubkey.substring(0,16)+'...')+'\'s House';
+        ttD.textContent='Built with a \u26A1 '+(frontierZappers[fi]?frontierZappers[fi].amount:'1000+')+' sat zap';
+        tt.querySelector('.hint').textContent='';
+      }else{
+        ttC.textContent='\u26A1 Frontier Lot — FOR SALE';ttC.style.color='#ff8844';
+        ttN.textContent='Lot #'+(fi+1)+' — Claim This Land!';
+        if(typeof nostrUser!=='undefined'&&nostrUser&&nostrUser.pubkey){
+          ttD.textContent='Click to zap 1000+ sats and build your house here!';
+          tt.querySelector('.hint').textContent='[ CLICK TO CLAIM ]';
+        }else{
+          ttD.textContent='Login with Nostr, then zap 1000+ sats to build your house here';
+          tt.querySelector('.hint').textContent='[ LOGIN FIRST ]';
+        }
+      }
+      tt.style.opacity='1';
+    }
+    tt.style.left=Math.min(e.clientX+15,(window.innerWidth||800)-380)+'px';
+    tt.style.top=Math.min(e.clientY+15,(window.innerHeight||600)-120)+'px';
+  }else if(frontierHovered>=0){
+    frontierHovered=-1;
+    if(tooltipLocked==='frontier'){tooltipLocked=false;tt.style.opacity='0';}
+  }
+});
+
+// Click unclaimed frontier lot: open zap prompt
+window.addEventListener('click',function(e){
+  if(e.target!==renderer.domElement||modalOpen||insideHouse||drMv)return;
+  var hitMeshes=frontierLotState.map(function(l){return l.hitMesh;});
+  var mx=(e.clientX/(window.innerWidth||1))*2-1;
+  var my=-(e.clientY/(window.innerHeight||1))*2+1;
+  frontierRc.setFromCamera(new THREE.Vector2(mx,my),camera);
+  var hits=frontierRc.intersectObjects(hitMeshes);
+  if(hits.length>0){
+    var fi=hits[0].object.userData.frontierIdx;
+    if(fi===undefined)return;
+    var lot=frontierLotState[fi];
+    if(lot.claimed){
+      // Show info about the owner
+      var pk=lot.ownerPubkey;var prof=profileCache[pk];var pImg=profileImgs[pk];
+      var profHtml='';
+      if(pImg&&pImg!=='loading'&&pImg!=='failed')profHtml+='<img src="'+pImg.src+'" alt="">';
+      else profHtml+='<div class="np-initials">'+(pk?pk.substring(0,2).toUpperCase():'??')+'</div>';
+      profHtml+='<div class="np-info"><div class="np-name">'+(lot.ownerName||'Frontier Settler')+'</div>';
+      profHtml+='<div class="np-pk">'+pk.substring(0,32)+'...</div></div>';
+      noteProfile.innerHTML=profHtml;
+      noteContent.textContent='\u26A1 This house was built by zapping 1000+ sats to the frontier note.\n\n'+(lot.ownerName||pk.substring(0,16)+'...')+' claimed Lot #'+(fi+1)+' in the Nostr Frontier!';
+      noteMeta.innerHTML='<span style="color:rgba(0,255,200,.5)">\uD83C\uDFE0 Frontier House \u2022 Lot #'+(fi+1)+'</span>';
+      noteModal.classList.add('open');modalOpen=true;
+    }else{
+      // Unclaimed — prompt to zap
+      if(typeof nostrUser!=='undefined'&&nostrUser&&nostrUser.pubkey&&nostrUser.signer){
+        openFrontierZapPrompt(fi);
+      }else{
+        // Not logged in — open login modal
+        loginModal.classList.add('open');
+        loginStatus.textContent='Login to claim Frontier Lot #'+(fi+1)+'! Zap 1000+ sats to build your house.';
+      }
+    }
+  }
+});
+
+// ── Frontier zap prompt: reuse the zap tree modal with different text ──
+function openFrontierZapPrompt(lotIdx){
+  // Override the zap modal for frontier use
+  var modal=document.getElementById('zap-tree-modal');
+  var title=modal.querySelector('h2');
+  var sub=modal.querySelector('.zt-sub');
+  var sendBtn=document.getElementById('zap-send-btn');
+  var statusEl=document.getElementById('zap-tree-status');
+  var invoiceArea=document.getElementById('zap-invoice-area');
+
+  title.innerHTML='\u26A1 Claim Frontier Lot #'+(lotIdx+1);
+  sub.textContent='Zap the frontier note with 1000+ sats to build your house on this lot! Your house will appear once the zap is confirmed.';
+
+  // Set minimum 1000 sats
+  selectedZapAmt=1000;
+  var amtBtns=document.querySelectorAll('.zap-amt-btn');
+  for(var i=0;i<amtBtns.length;i++)amtBtns[i].classList.remove('selected');
+  // Pre-select the 2.1k button or set custom
+  document.getElementById('zap-custom-amt').value='1000';
+
+  sendBtn.disabled=false;
+  sendBtn.textContent='\u26A1 ZAP TO CLAIM LOT';
+  statusEl.textContent='Minimum 1000 sats to claim this lot';
+  invoiceArea.classList.remove('v');
+
+  // Tag this modal as frontier mode
+  modal.setAttribute('data-frontier-lot',lotIdx);
+
+  modal.classList.add('open');
+}
+
+// Override zap send to handle frontier lots
+var origZapSendHandler=zapSendBtn.onclick;
+zapSendBtn.addEventListener('click',function(e){
+  var modal=document.getElementById('zap-tree-modal');
+  var lotAttr=modal.getAttribute('data-frontier-lot');
+  if(lotAttr!==null&&lotAttr!==''){
+    e.stopImmediatePropagation();
+    var lotIdx=parseInt(lotAttr);
+    var amt=selectedZapAmt||1000;
+    if(amt<FRONTIER_MIN_SATS){
+      document.getElementById('zap-tree-status').textContent='Minimum '+FRONTIER_MIN_SATS+' sats required to claim a lot!';
+      return;
+    }
+    // Clear frontier attribute so the normal zap handler doesn't re-trigger
+    modal.removeAttribute('data-frontier-lot');
+    // Use the normal zap flow but targeting the frontier note
+    zapSendBtn.disabled=true;
+    zapSendBtn.textContent='Connecting...';
+    if(zapTargetCallback){
+      doZap(amt,document.getElementById('zap-comment').value.trim()||'Claiming Frontier Lot #'+(lotIdx+1)+'!');
+    }else{
+      fetchZapEndpoint(function(ok){
+        if(ok)doZap(amt,document.getElementById('zap-comment').value.trim()||'Claiming Frontier Lot #'+(lotIdx+1)+'!');
+        else{zapSendBtn.disabled=false;zapSendBtn.textContent='\u26A1 ZAP TO CLAIM LOT';}
+      });
+    }
+  }
+});
+
+// When the zap tree modal closes, reset frontier mode
+var origZapCloseClick=zapTreeClose.onclick;
+zapTreeClose.addEventListener('click',function(){
+  var modal=document.getElementById('zap-tree-modal');
+  modal.removeAttribute('data-frontier-lot');
+  // Restore normal tree zap labels
+  modal.querySelector('h2').innerHTML='\u26A9 Zap the Village Tree';
+  modal.querySelector('.zt-sub').textContent='Send sats to grow the community tree! Zaps go to the village treasury.';
+});
 
 // ═══════════════════════════════════════════════════════════════════════════
 // §24 BUILDING ENTER/EXIT SYSTEM
