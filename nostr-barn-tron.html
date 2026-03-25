@@ -1804,39 +1804,50 @@ searchIn.addEventListener('input',function(){
   if(q.length<2){searchRes.textContent='';searchNotes=[];searchQuery='';
     for(var ci=0;ci<radarCells.length;ci++){radarCells[ci].searchHit=false;}return;}
   searchDebounce=setTimeout(function(){
-    searchQuery=q;searchRes.textContent='Searching relay.nostr.band...';
+    searchQuery=q;searchRes.textContent='Searching...';
     if(searchWs){try{searchWs.close();}catch(e){}}
     searchNotes=[];
     var gotEose=false;
-    try{
-      searchWs=new WebSocket('wss://relay.nostr.band');
-      searchWs.onopen=function(){
-        searchWs.send(JSON.stringify(["REQ","s",{kinds:[1],search:q,limit:80}]));
-      };
-      searchWs.onmessage=function(e){
-        try{var m=JSON.parse(e.data);
-          if(m[0]==="EVENT"&&m[2]&&m[2].content&&!isJunkNote(m[2])){searchNotes.push(m[2]);}
-          if(m[0]==="EOSE"){
-            gotEose=true;
-            try{searchWs.send(JSON.stringify(["CLOSE","s"]));searchWs.close();}catch(ee){}
+    // Use Primal caching relay first (fast, reliable), then nostr.band as fallback
+    var searchRelays=['wss://relay.primal.net','wss://relay.nostr.band'];
+    var searchTried=0;
+    function trySearchRelay(){
+      if(searchTried>=searchRelays.length){localSearch(q);return;}
+      var url=searchRelays[searchTried++];
+      try{
+        searchWs=new WebSocket(url);
+        var wsOpened=false;
+        searchWs.onopen=function(){
+          wsOpened=true;
+          searchWs.send(JSON.stringify(["REQ","s",{kinds:[1],search:q,limit:80}]));
+          searchRes.textContent='Searching '+url.replace('wss://','')+'...';
+        };
+        searchWs.onmessage=function(e){
+          try{var m=JSON.parse(e.data);
+            if(m[0]==="EVENT"&&m[2]&&m[2].content&&!isJunkNote(m[2])){searchNotes.push(m[2]);}
+            if(m[0]==="EOSE"){
+              gotEose=true;
+              try{searchWs.send(JSON.stringify(["CLOSE","s"]));searchWs.close();}catch(ee){}
+              searchWs=null;
+              if(searchNotes.length>0){showSearchResults();}
+              else{trySearchRelay();} // no results — try next relay
+            }
+          }catch(ee){}
+        };
+        searchWs.onerror=function(){
+          if(!wsOpened){searchWs=null;trySearchRelay();}
+        };
+        setTimeout(function(){
+          if(!gotEose&&searchWs){
+            try{searchWs.close();}catch(ee){}
             searchWs=null;
-            showSearchResults();
+            if(searchNotes.length>0)showSearchResults();
+            else trySearchRelay();
           }
-        }catch(ee){}
-      };
-      searchWs.onerror=function(){
-        if(!gotEose){searchWs=null;localSearch(q);}
-      };
-      // Timeout fallback - if relay doesn't respond in 4s, search locally
-      setTimeout(function(){
-        if(!gotEose&&searchWs){
-          try{searchWs.close();}catch(ee){}
-          searchWs=null;
-          if(searchNotes.length>0)showSearchResults();
-          else localSearch(q);
-        }
-      },4000);
-    }catch(ee){localSearch(q);}
+        },4000);
+      }catch(ee){trySearchRelay();}
+    }
+    trySearchRelay();
   },600);
 });
 function localSearch(q){
@@ -2067,50 +2078,99 @@ function onToggleGarden(){
 setTimeout(function(){buildGMGarden();},100);
 // Fetch GM notes in background, update plants when they arrive
 setTimeout(function(){if(!gmFetched){gmFetched=true;fetchGMNotes();}},2000);
-// Fallback: if notes haven't arrived after 10s, use main relay notes
+// Fallback: if notes haven't arrived after 12s, filter main feed for actual GM notes
 setTimeout(function(){
   if(gmNotes.length===0&&nostrNotes.length>0){
+    console.log('[GM Garden] 12s fallback — filtering main feed for GM notes');
     for(var i=0;i<nostrNotes.length&&gmNotes.length<21;i++){
-      var c=(nostrNotes[i].content||'').toLowerCase().trim();
-      if(c.length>5&&c.length<300)gmNotes.push(nostrNotes[i]);
+      if(isValidGMNote(nostrNotes[i]))gmNotes.push(nostrNotes[i]);
     }
+    console.log('[GM Garden] Found '+gmNotes.length+' GM notes in main feed');
     if(gmNotes.length>0)updateGardenNotes();
   }
-},10000);
+},12000);
+
+// GM note content validation — must actually contain "gm" or "good morning"
+function isValidGMNote(note){
+  if(!note||!note.content)return false;
+  var c=note.content.toLowerCase().trim();
+  if(c.length>300||c.length<1)return false;
+  // Must start with or contain "gm" or "good morning" as a distinct word
+  if(/\bgm\b/i.test(c)||/\bgood\s*morning\b/i.test(c))return true;
+  return false;
+}
 
 function fetchGMNotes(){
-  try{
-    var ws=new WebSocket('wss://relay.nostr.band');
-    ws.onopen=function(){ws.send(JSON.stringify(["REQ","gm",{kinds:[1],search:"gm",limit:40}]));};
-    ws.onmessage=function(e){
-      try{var m=JSON.parse(e.data);
-        if(m[0]==="EVENT"&&m[2]&&m[2].content){
-          var c=m[2].content.toLowerCase().trim();
-          if(c.length<200&&(/^gm\b/i.test(c)||/^good\s*morning/i.test(c))){
-            gmNotes.push(m[2]);
-            if(!profileCache[m[2].pubkey]){
-              try{ws.send(JSON.stringify(["REQ","gp"+gmNotes.length,{kinds:[0],authors:[m[2].pubkey],limit:1}]));}catch(ee){}
+  // Strategy: use Primal caching relay with NIP-50 search for "gm" notes
+  // Then strictly validate each note's content before including
+  var relays=['wss://relay.primal.net','wss://relay.nostr.band','wss://relay.damus.io'];
+  var tried=0;
+  function tryRelay(){
+    if(tried>=relays.length){
+      // All relays failed — fall back to filtering main feed
+      console.log('[GM Garden] All relays failed, filtering main feed');
+      for(var i=0;i<nostrNotes.length&&gmNotes.length<21;i++){
+        if(isValidGMNote(nostrNotes[i]))gmNotes.push(nostrNotes[i]);
+      }
+      if(gmNotes.length>0)updateGardenNotes();
+      return;
+    }
+    var url=relays[tried++];
+    console.log('[GM Garden] Trying '+url+'...');
+    try{
+      var ws=new WebSocket(url);
+      var opened=false;var gotEose=false;
+      ws.onopen=function(){
+        opened=true;
+        // Use NIP-50 search if supported (Primal and nostr.band support it)
+        ws.send(JSON.stringify(["REQ","gm",{kinds:[1],search:"gm good morning",limit:80}]));
+      };
+      ws.onmessage=function(e){
+        try{var m=JSON.parse(e.data);
+          if(m[0]==="EVENT"&&m[2]&&m[2].content){
+            // Strictly validate — only accept notes that actually say "gm" or "good morning"
+            if(isValidGMNote(m[2])){
+              gmNotes.push(m[2]);
+              if(!profileCache[m[2].pubkey]){
+                try{ws.send(JSON.stringify(["REQ","gp"+gmNotes.length,{kinds:[0],authors:[m[2].pubkey],limit:1}]));}catch(ee){}
+              }
             }
           }
+          if(m[0]==="EVENT"&&m[2]&&m[2].kind===0){
+            try{var p=JSON.parse(m[2].content);profileCache[m[2].pubkey]={name:p.name||p.display_name||'',picture:p.picture||''};
+              if(p.picture)loadProfileImg(m[2].pubkey,p.picture);}catch(pe){}
+          }
+          if(m[0]==="EOSE"&&m[1]==="gm"){
+            gotEose=true;
+            ws.send(JSON.stringify(["CLOSE","gm"]));
+            console.log('[GM Garden] Got '+gmNotes.length+' valid GM notes from '+url);
+            if(gmNotes.length>=5){
+              // Good enough — use these
+              setTimeout(function(){try{ws.close();}catch(ee){}updateGardenNotes();},1500);
+            }else{
+              // Not enough — try next relay
+              try{ws.close();}catch(ee){}
+              tryRelay();
+            }
+          }
+        }catch(ee){}
+      };
+      ws.onerror=function(){
+        console.log('[GM Garden] '+url+' failed');
+        if(!opened)tryRelay();
+      };
+      // Timeout: if no response in 5s, try next relay
+      setTimeout(function(){
+        if(!gotEose){
+          console.log('[GM Garden] '+url+' timed out');
+          try{ws.close();}catch(ee){}
+          if(gmNotes.length>=5){updateGardenNotes();}
+          else{tryRelay();}
         }
-        if(m[0]==="EVENT"&&m[2]&&m[2].kind===0){
-          try{var p=JSON.parse(m[2].content);profileCache[m[2].pubkey]={name:p.name||p.display_name||'',picture:p.picture||''};
-            if(p.picture)loadProfileImg(m[2].pubkey,p.picture);}catch(pe){}
-        }
-        if(m[0]==="EOSE"&&m[1]==="gm"){
-          ws.send(JSON.stringify(["CLOSE","gm"]));
-          setTimeout(function(){ws.close();updateGardenNotes();},1500);
-        }
-      }catch(ee){}
-    };
-    ws.onerror=function(){
-      for(var i=0;i<nostrNotes.length&&gmNotes.length<21;i++){
-        var c=nostrNotes[i].content.toLowerCase().trim();
-        if(c.length<200&&(/^gm\b/i.test(c)||/^good\s*morning/i.test(c)))gmNotes.push(nostrNotes[i]);
-      }
-      updateGardenNotes();
-    };
-  }catch(ee){}
+      },5000);
+    }catch(ee){tryRelay();}
+  }
+  tryRelay();
 }
 
 function updateGardenNotes(){
