@@ -3989,9 +3989,13 @@ window.addEventListener('pointermove',function(e){
 // Deep link: open directly inside a villager's building (?npub=… or ?house=…, or #npub=…)
 function deepLinkNpubRaw(){
   var raw='';
+  console.log('[DeepLink] URL: '+window.location.href);
+  console.log('[DeepLink] search: "'+window.location.search+'"');
+  console.log('[DeepLink] hash: "'+window.location.hash+'"');
   try{
     var sp=new URLSearchParams(window.location.search);
     raw=sp.get('npub')||sp.get('house')||'';
+    console.log('[DeepLink] from search params: "'+raw+'"');
     if(!raw&&location.hash){
       var h=location.hash.replace(/^#/,'');
       if(/^npub=/i.test(h))raw=h.slice(5);
@@ -4000,34 +4004,70 @@ function deepLinkNpubRaw(){
         var hp=new URLSearchParams(h);
         raw=hp.get('npub')||hp.get('house')||'';
       }
+      console.log('[DeepLink] from hash: "'+raw+'"');
     }
-  }catch(e){}
+  }catch(e){console.log('[DeepLink] parse error: '+e);}
+  if(!raw){
+    // Also try to find npub anywhere in the URL (fallback)
+    var fullUrl=window.location.href;
+    var npubMatch=fullUrl.match(/npub1[a-z0-9]{58,}/i);
+    if(npubMatch){raw=npubMatch[0];console.log('[DeepLink] regex fallback found: "'+raw+'"');}
+  }
   if(!raw)return'';
   try{raw=decodeURIComponent(raw.replace(/\+/g,' '));}catch(e2){}
   return String(raw).trim();
 }
 function findVillageBuildingByDeepLink(raw){
   if(!raw)return null;
-  var q=raw.toLowerCase();
+  var q=raw.toLowerCase().trim();
+  console.log('[DeepLink] searching for: "'+q+'" among '+village.length+' buildings');
+  // 1. Try exact 64-char hex match
   if(/^[0-9a-f]{64}$/.test(q)){
-    for(var i=0;i<village.length;i++){if(village[i].hex===q)return village[i];}
+    for(var i=0;i<village.length;i++){
+      if(village[i].hex===q){console.log('[DeepLink] hex match at index '+i);return village[i];}
+    }
+    console.log('[DeepLink] no hex match found');
     return null;
   }
+  // 2. Try bech32 decode → hex match
   var fromBech=npubToHex(q);
-  if(fromBech){
-    for(var vi=0;vi<village.length;vi++){if(village[vi].hex===fromBech)return village[vi];}
+  console.log('[DeepLink] decoded bech32 to hex: "'+fromBech+'" (len='+fromBech.length+')');
+  if(fromBech&&fromBech.length>=64){
+    // npubToHex may produce extra leading bytes — take the last 64 chars (the actual key)
+    var hexKey=fromBech.length>64?fromBech.slice(fromBech.length-64):fromBech;
+    console.log('[DeepLink] using hex key: "'+hexKey+'"');
+    for(var vi=0;vi<village.length;vi++){
+      if(village[vi].hex===hexKey){console.log('[DeepLink] bech32→hex match at index '+vi);return village[vi];}
+    }
   }
+  // 3. Try direct npub string match against VILLAGE_NPUBS
   for(var vj=0;vj<village.length;vj++){
     var nd=village[vj].npubData;
-    if(nd&&nd.npub&&String(nd.npub).toLowerCase()===q)return village[vj];
+    if(nd&&nd.npub&&String(nd.npub).toLowerCase()===q){console.log('[DeepLink] npub string match at index '+vj);return village[vj];}
+  }
+  // 4. Try name match (case-insensitive)
+  for(var vk=0;vk<village.length;vk++){
+    var nd2=village[vk].npubData;
+    if(nd2&&nd2.name&&nd2.name.toLowerCase()===q){console.log('[DeepLink] name match at index '+vk);return village[vk];}
+  }
+  // 5. Debug: log all village hex values for comparison
+  console.log('[DeepLink] no match found. Village hex values:');
+  for(var vd=0;vd<Math.min(village.length,5);vd++){
+    console.log('  ['+vd+'] hex="'+village[vd].hex+'" npub="'+(village[vd].npubData?village[vd].npubData.npub.substring(0,30)+'...':'')+'"');
   }
   return null;
 }
 function tryDeepLinkEnterBuilding(){
   var key=deepLinkNpubRaw();
-  if(!key)return;
+  if(!key){console.log('[DeepLink] no deep link key found in URL');return;}
+  console.log('[DeepLink] raw key from URL: "'+key+'"');
   var b=findVillageBuildingByDeepLink(key);
-  if(b)enterBuilding(b);
+  if(b){
+    console.log('[DeepLink] found building, entering...');
+    enterBuilding(b);
+  }else{
+    console.log('[DeepLink] building not found for key: '+key);
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -4385,8 +4425,9 @@ function anim(){
   }
   renderer.render(scene,camera);
 }
-tryDeepLinkEnterBuilding();
 anim();
+// Deep link: delay slightly so render loop is running and camera transition works
+setTimeout(function(){tryDeepLinkEnterBuilding();},500);
 window.addEventListener('resize',function(){var w=window.innerWidth||800,h=window.innerHeight||600;camera.aspect=w/h;camera.updateProjectionMatrix();renderer.setSize(w,h);});
 
 // ═══════════════════════════════════════════════════════════════════════════
