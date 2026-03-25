@@ -2118,8 +2118,9 @@ function updateGardenNotes(){
   for(var i=0;i<gmPlants.length;i++){
     if(gmNotes.length>0){
       var n=gmNotes[i%gmNotes.length];
-      gmPlants[i].note=n;
-      gmPlants[i].hitMesh.userData.gmNote=n;
+      var gp=gmPlants[i];if(!gp)continue;
+      gp.note=n;
+      try{if(gp.hitBox&&gp.hitBox.userData)gp.hitBox.userData.gmNote=n;}catch(e){}
       // Update name tag
       var prof=profileCache[n.pubkey];
       var nameStr=prof&&prof.name?prof.name:'GM #'+(i+1);
@@ -2127,8 +2128,8 @@ function updateGardenNotes(){
       var nctx=nlc.getContext('2d');nctx.fillStyle='rgba(0,255,200,0.5)';nctx.font='bold 10px Courier New';
       nctx.fillText(nameStr.substring(0,12),4,18);
       var ntex=new THREE.CanvasTexture(nlc);ntex.minFilter=THREE.LinearFilter;
-      if(gmPlants[i].nameSprite){
-        gmPlants[i].nameSprite.material.map=ntex;gmPlants[i].nameSprite.material.needsUpdate=true;
+      if(gp.nameSprite){
+        gp.nameSprite.material.map=ntex;gp.nameSprite.material.needsUpdate=true;
       }
     }
   }
@@ -2775,74 +2776,76 @@ function onToggleBanjo(){
 // TECHNO-AMISH VILLAGE – 21 buildings with enterable interiors
 // ═══════════════════════════════════════════════════════════════
 var VILLAGE_NPUBS=[
-  {npub:'npub1sg6plzptd64u62a878hep2kev3zqh0tngrrlg993pg3wfqknskqmqsnm29',name:'jack'},
-  {npub:'npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsyjh6w6',name:'fiatjaf'},
-  {npub:'npub1xtscya34g58tk0z605fvr788k263gsu6cy9x0mhnm87echrgufzsaxk5xl',name:'jb55'},
-  {npub:'npub1qny3tkh0acurzla8x3zy4nhrjz5zd8l9sy9jys09umwng00manysew95gx',name:'ODELL'},
+  // ── BUSINESSES (indices 0–11): around the central square ──
+  {npub:'npub1sweetl0gskmka0n5qevt7v2wj9q56ntwkmaeywffw4ftaucmcakquhns6h',name:'Sweet Sats'},
+  {npub:'npub1m8pw94xduq3rtlx4fq648dtddz5je0hxerm2xc9rdd4zdq28gzqsg8gqln',name:'Seed Vault Market'},
+  {npub:'npub14dcps797lsnqjl7d6fetkuq6a0068538e2kgt55vt4zdapxk638qj7wcyy',name:'JohnnyMilkweed'},
+  {npub:'npub1vycqsl0ya8mrpak8wk2lhn477eh05qmhe0lkp9aqsnf5c9s08xcszxgjv5',name:'Snorkel Hot Tubs'},
+  {npub:'npub153xmex42x4chdf757hp3q6zxagykkek7pdgwuwd074964dkyha9s82ryu8',name:'Ben Justman Wine'},
+  {npub:'npub1n8805ezmqzqhxuernt4mjmfdrxgzgjv5uhjk24nvstqyhrwxtd2qj9teq3',name:'Great Ghee'},
+  {npub:'npub1zzmxvr9sw49lhzfx236aweurt8h5tmzjw7x3gfsazlgd8j64ql0sexw5wy',name:'Soap Miner'},
+  {npub:'npub1v0tfjv5ahr3c260jtzdk5w48krerrnkg8fmcnc5lpguk0qda04eqzm3m3e',name:'Leathermint'},
+  {npub:'npub1ndketdm2qyv35nrhsxzks8kh7w7w6tll4rjp29hv0qjqkgfjsh6snmgk2v',name:'Madex Art'},
+  {npub:'npub1rpfds03tn5f054sswxl7zk0lttj3ptclex63hp2nnjm2s9yx7grsxtjurw',name:'Bitcoin Butcher'},
+  {npub:'npub1k8s3skyy5mg5h07w8zvuk5lgrqadmejz7fjdpl60zaznw8sxzdxqxm6y88',name:'Solo Satoshi'},
+  {npub:'npub1a6zkqnuwcmjwynuw4u4xyngy9675x8dwgj87z9me4h8mdwmc2a0q8mvhjk',name:'Satoshi Coffee'},
+  // ── VILLAGERS (indices 12–27): off the square ──
+  {npub:'npub1rtlqca8r6auyaw5n5h3l5422dm4sry5dzfee4696fqe8s6qgudks7djtfs',name:'Hodl'},
+  {npub:'npub1sg6plzptd64u62a878hep2kev88swjh3tw00gjsfl8f237lmu63q0uf63m',name:'Jack'},
   {npub:'npub1dergggklka99wwrs92yz8wdjs952h2ux2ha2ed598ngwu9w7a6fsh9xzpc',name:'Gigi'},
-  {npub:'npub1g53mukxnjkcmr94fhryzkqutdz2ukq4ks0gvy5af25rgmwsl4ngq43drvk',name:'Martti Malmi'},
-  {npub:'npub1az9xj85cmxv8e9j9y80grber6p85srpul94t4e3q28z0h0d70w0sflj7kw',name:'NVK'},
-  {npub:'npub1l2vyh47mk2p0qlsku7hg0vn29faehy9hy34ygaclpn66ukqp3afqutajft',name:'Pablo'},
-  {npub:'npub18ams6ewn5aj2n3wt2qawzglx9mr4nzksxhvrdc4vc4elk34dd6kqpfw06t',name:'Derek Ross'},
-  {npub:'npub1sn0wdenkukak0d9dfczzeacvhkrgz92ak56egt7vdgzn8pv2wfqqhrjdv9',name:'Snowden'},
+  {npub:'npub1qny3tkh0acurzla8x3zy4nhrjz5zd8l9sy9jys09umwng00manysew95gx',name:'Odell'},
+  {npub:'npub18ams6ewn5aj2n3wt2qawzglx9mr4nzksxhvrdc4gzrecw7n5tvjqctp424',name:'Derek Ross'},
+  {npub:'npub1xtscya34g58tk0z605fvr788k263gsu6cy9x0mhnm87echrgufzsevkk5s',name:'Jb55'},
+  {npub:'npub1x458tl7h9xcxa66vr4a8pg0h2qz96pnhwnfpcra0le9090uk5t5qw7armt',name:'Laser'},
+  {npub:'npub1f5pre6wl6ad87vr4hr5wppqq30sh58m4p33mthnjreh03qadcajs7gwt3z',name:'revHodl'},
+  {npub:'npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsyjh6w6',name:'Fiatjaf'},
+  {npub:'npub1gcxzte5zlkncx26j68ez60fzkvtkm9e0vrwdcvsjakxf9mu9qewqlfnj5z',name:'Vitor'},
+  {npub:'npub1az9xj85cmxv8e9j9y80lvqp97crsqdu2fpu3srwthd99qfu9qsgstam8y8',name:'NVK'},
   {npub:'npub1a2cww4kn9wqte4ry70vyfsuqq6qu7wdrain0n2gkd3t3gxc5lf0sa7kzjn',name:'Lyn Alden'},
-  {npub:'npub1hu3hdctm5nkzd8gslnyedfr5ddz3z547dp6h3utyd6vfnlev8tgs2e4phy',name:'carla'},
-  {npub:'npub12rv5lskctqxxs2c8rf2zlzc7xx3qpvzs3w4etgemasvyujhffrwsq0rnwy',name:'Kukks'},
-  {npub:'npub1gcxzte5zlkncx26j68ez60fzkvtkm9e0vrwdcvsjakxf9mu9qewqlfnj5z',name:'Ben Arc'},
-  {npub:'npub1nstrcu63lzpjkz94djajuz2evrgu2psd66cwgc0284cql0cqsq35qjkpt3',name:'nostrudel'},
-  {npub:'npub1rxysxnjkhrmqd3ey73dp9n5y5yvyzcs64csg0v44cfkesgzy85yqq7yt4zn',name:'Karnage'},
-  {npub:'npub1v0lxxxxutpvrelsksy8cdhgfux9l6a42hsj2qzquu2zk7vc9qnkszrqj49',name:'Vitor Pamplona'},
-  {npub:'npub1s5yq6wadwrxde4lhfs56gn64hwzhhqpp7pz2lfyj3aqn57lcs4nq7rqcwq',name:'McShane'},
-  {npub:'npub1wmr34t36fy03m8hvgl96zl3znndyzyaqhwmwdtshwmtkg03fetc5qmx03f',name:'BTCsessions'},
-  {npub:'npub1lunaq893u4hmtpvqxpk8hfmtkqmm7ggutdezjl6ausp6ykfvr3cqwjzuae',name:'hodlbod'},
-  {npub:'npub1sg6plzptd64u62a878hep2kev3zqh0tngrrlg993pg3wfqknskqmqsnm29',name:'Gigi (store)'},
-  {npub:'npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsyjh6w6',name:'fiatjaf (workshop)'},
-  {npub:'npub1xtscya34g58tk0z605fvr788k263gsu6cy9x0mhnm87echrgufzsaxk5xl',name:'jb55 (lab)'},
-  {npub:'npub1qny3tkh0acurzla8x3zy4nhrjz5zd8l9sy9jys09umwng00manysew95gx',name:'ODELL (tavern)'},
-  {npub:'npub1dergggklka99wwrs92yz8wdjs952h2ux2ha2ed598ngwu9w7a6fsh9xzpc',name:'Gigi (library)'},
-  {npub:'npub1g53mukxnjkcmr94fhryzkqutdz2ukq4ks0gvy5af25rgmwsl4ngq43drvk',name:'Martti (smithy)'},
-  {npub:'npub1az9xj85cmxv8e9j9y80grber6p85srpul94t4e3q28z0h0d70w0sflj7kw',name:'NVK (bank)'},
-  {npub:'npub1l2vyh47mk2p0qlsku7hg0vn29faehy9hy34ygaclpn66ukqp3afqutajft',name:'Pablo (chapel)'},
+  {npub:'npub1l2vyh47mk2p0qlsku7hg0vn29faehy9hy34ygaclpn66ukqp3afqutajft',name:'Pablo'},
+  {npub:'npub1cj8znuztfqkvq89pl8hceph0svvvqk0qay6nydgk9uyq7fhpfsgsqwrz4u',name:'Walker'},
+  {npub:'npub12rv5lskctqxxs2c8rf2zlzc7xx3qpvzs3w4etgemauy9thegr43sf485vg',name:'Calle'},
+  {npub:'npub1x3w5ty7cdrcznw4nn3ylexc35as3ky953fj7s9gns8f3zklajhdsl2mh3r',name:'Royster'},
 ];
 // Village center at (120,0). Main street runs E-W, cross streets N-S.
 // Entrances: clear gap at west (road from barn), north, south, east
 var VILLAGE_CX=120,VILLAGE_CZ=0;
 var BLDG_LAYOUTS=[
-  // ── North side of square – mixed storefronts ──
-  {x:-22,z:-18,ry:0,w:7,d:6,h:3.5,roof:5.5,type:'house'},
-  {x:-11,z:-18,ry:0,w:12,d:9,h:5.5,roof:8.5,type:'shop'},  // large general store
-  {x:11,z:-18,ry:0,w:10,d:8,h:5,roof:7.5,type:'shop'},      // bakery
-  {x:23,z:-18,ry:0,w:7,d:6,h:4,roof:6,type:'house'},
-  // ── South side – town hall and shops ──
-  {x:-22,z:18,ry:Math.PI,w:8,d:7,h:4,roof:6.5,type:'house'},
-  {x:-10,z:18,ry:Math.PI,w:14,d:10,h:6,roof:9,type:'shop'}, // town hall / large shop
+  // ── North side of square – businesses (Sweet Sats, Seed Vault, JohnnyMilkweed, Snorkel) ──
+  {x:-22,z:-18,ry:0,w:7,d:6,h:3.5,roof:5.5,type:'shop'},
+  {x:-11,z:-18,ry:0,w:12,d:9,h:5.5,roof:8.5,type:'shop'},
+  {x:11,z:-18,ry:0,w:10,d:8,h:5,roof:7.5,type:'shop'},
+  {x:23,z:-18,ry:0,w:7,d:6,h:4,roof:6,type:'shop'},
+  // ── South side of square – businesses (Ben Justman, Great Ghee, Soap Miner, Leathermint) ──
+  {x:-22,z:18,ry:Math.PI,w:8,d:7,h:4,roof:6.5,type:'shop'},
+  {x:-10,z:18,ry:Math.PI,w:14,d:10,h:6,roof:9,type:'shop'},
   {x:10,z:18,ry:Math.PI,w:9,d:7,h:4.5,roof:7,type:'shop'},
-  {x:23,z:18,ry:Math.PI,w:7,d:6,h:3.5,roof:5.5,type:'house'},
-  // ── East side ──
-  {x:32,z:-12,ry:-Math.PI/2,w:8,d:7,h:4,roof:6.5,type:'house'},
-  {x:32,z:12,ry:-Math.PI/2,w:7,d:6,h:3.5,roof:5.5,type:'house'},
-  // ── West side ──
+  {x:23,z:18,ry:Math.PI,w:7,d:6,h:3.5,roof:5.5,type:'shop'},
+  // ── East side of square – businesses (Madex Art, Bitcoin Butcher) ──
+  {x:32,z:-12,ry:-Math.PI/2,w:8,d:7,h:4,roof:6.5,type:'shop'},
+  {x:32,z:12,ry:-Math.PI/2,w:7,d:6,h:3.5,roof:5.5,type:'shop'},
+  // ── West side of square – businesses (Solo Satoshi, Satoshi Coffee) ──
   {x:-32,z:-12,ry:Math.PI/2,w:9,d:7,h:4.5,roof:7,type:'shop'},
-  {x:-32,z:12,ry:Math.PI/2,w:7,d:6,h:4,roof:6,type:'house'},
-  // ── North street – church at the end ──
+  {x:-32,z:12,ry:Math.PI/2,w:7,d:6,h:4,roof:6,type:'shop'},
+  // ── North street – villagers (Hodl, Jack, Gigi's church, Odell) ──
   {x:-7,z:-32,ry:Math.PI/2,w:7,d:6,h:3.5,roof:5.5,type:'house'},
   {x:7,z:-32,ry:-Math.PI/2,w:8,d:7,h:4,roof:6.5,type:'house'},
-  {x:0,z:-48,ry:0,w:10,d:14,h:6,roof:10,type:'church'},     // church with steeple
-  {x:7,z:-44,ry:-Math.PI/2,w:6,d:5,h:3,roof:5,type:'house'}, // small cottage
-  // ── South street ──
+  {x:0,z:-48,ry:0,w:10,d:14,h:6,roof:10,type:'church'},
+  {x:7,z:-44,ry:-Math.PI/2,w:6,d:5,h:3,roof:5,type:'house'},
+  // ── South street – villagers (Derek Ross, Jb55, Laser, revHodl) ──
   {x:-7,z:32,ry:Math.PI/2,w:8,d:7,h:4,roof:6.5,type:'house'},
-  {x:7,z:32,ry:-Math.PI/2,w:11,d:8,h:5,roof:7.5,type:'shop'},
+  {x:7,z:32,ry:-Math.PI/2,w:11,d:8,h:5,roof:7.5,type:'house'},
   {x:-7,z:44,ry:Math.PI/2,w:6,d:5,h:3,roof:5,type:'house'},
   {x:7,z:44,ry:-Math.PI/2,w:7,d:6,h:4,roof:6,type:'house'},
-  // ── East road ──
+  // ── East road – villagers (Fiatjaf, Vitor, NVK, Lyn Alden) ──
   {x:44,z:-7,ry:0,w:8,d:7,h:4,roof:6.5,type:'house'},
-  {x:44,z:7,ry:Math.PI,w:10,d:8,h:5,roof:7.5,type:'shop'},
+  {x:44,z:7,ry:Math.PI,w:10,d:8,h:5,roof:7.5,type:'house'},
   {x:56,z:-7,ry:0,w:6,d:5,h:3,roof:5,type:'house'},
   {x:56,z:7,ry:Math.PI,w:7,d:6,h:4,roof:6,type:'house'},
-  // ── Approach road ──
+  // ── Approach road – villagers (Pablo, Walker, Calle, Royster) ──
   {x:-46,z:-8,ry:0,w:7,d:6,h:3.5,roof:5.5,type:'house'},
   {x:-46,z:8,ry:Math.PI,w:8,d:7,h:4,roof:6.5,type:'house'},
-  {x:-58,z:-8,ry:0,w:9,d:7,h:4.5,roof:7,type:'shop'},
+  {x:-58,z:-8,ry:0,w:9,d:7,h:4.5,roof:7,type:'house'},
   {x:-58,z:8,ry:Math.PI,w:6,d:5,h:3,roof:5,type:'house'},
 ];
 
@@ -3987,9 +3990,13 @@ window.addEventListener('pointermove',function(e){
 // Deep link: open directly inside a villager's building (?npub=… or ?house=…, or #npub=…)
 function deepLinkNpubRaw(){
   var raw='';
+  console.log('[DeepLink] URL: '+window.location.href);
+  console.log('[DeepLink] search: "'+window.location.search+'"');
+  console.log('[DeepLink] hash: "'+window.location.hash+'"');
   try{
     var sp=new URLSearchParams(window.location.search);
     raw=sp.get('npub')||sp.get('house')||'';
+    console.log('[DeepLink] from search params: "'+raw+'"');
     if(!raw&&location.hash){
       var h=location.hash.replace(/^#/,'');
       if(/^npub=/i.test(h))raw=h.slice(5);
@@ -3998,34 +4005,70 @@ function deepLinkNpubRaw(){
         var hp=new URLSearchParams(h);
         raw=hp.get('npub')||hp.get('house')||'';
       }
+      console.log('[DeepLink] from hash: "'+raw+'"');
     }
-  }catch(e){}
+  }catch(e){console.log('[DeepLink] parse error: '+e);}
+  if(!raw){
+    // Also try to find npub anywhere in the URL (fallback)
+    var fullUrl=window.location.href;
+    var npubMatch=fullUrl.match(/npub1[a-z0-9]{58,}/i);
+    if(npubMatch){raw=npubMatch[0];console.log('[DeepLink] regex fallback found: "'+raw+'"');}
+  }
   if(!raw)return'';
   try{raw=decodeURIComponent(raw.replace(/\+/g,' '));}catch(e2){}
   return String(raw).trim();
 }
 function findVillageBuildingByDeepLink(raw){
   if(!raw)return null;
-  var q=raw.toLowerCase();
+  var q=raw.toLowerCase().trim();
+  console.log('[DeepLink] searching for: "'+q+'" among '+village.length+' buildings');
+  // 1. Try exact 64-char hex match
   if(/^[0-9a-f]{64}$/.test(q)){
-    for(var i=0;i<village.length;i++){if(village[i].hex===q)return village[i];}
+    for(var i=0;i<village.length;i++){
+      if(village[i].hex===q){console.log('[DeepLink] hex match at index '+i);return village[i];}
+    }
+    console.log('[DeepLink] no hex match found');
     return null;
   }
+  // 2. Try bech32 decode → hex match
   var fromBech=npubToHex(q);
-  if(fromBech){
-    for(var vi=0;vi<village.length;vi++){if(village[vi].hex===fromBech)return village[vi];}
+  console.log('[DeepLink] decoded bech32 to hex: "'+fromBech+'" (len='+fromBech.length+')');
+  if(fromBech&&fromBech.length>=64){
+    // npubToHex may produce extra leading bytes — take the last 64 chars (the actual key)
+    var hexKey=fromBech.length>64?fromBech.slice(fromBech.length-64):fromBech;
+    console.log('[DeepLink] using hex key: "'+hexKey+'"');
+    for(var vi=0;vi<village.length;vi++){
+      if(village[vi].hex===hexKey){console.log('[DeepLink] bech32→hex match at index '+vi);return village[vi];}
+    }
   }
+  // 3. Try direct npub string match against VILLAGE_NPUBS
   for(var vj=0;vj<village.length;vj++){
     var nd=village[vj].npubData;
-    if(nd&&nd.npub&&String(nd.npub).toLowerCase()===q)return village[vj];
+    if(nd&&nd.npub&&String(nd.npub).toLowerCase()===q){console.log('[DeepLink] npub string match at index '+vj);return village[vj];}
+  }
+  // 4. Try name match (case-insensitive)
+  for(var vk=0;vk<village.length;vk++){
+    var nd2=village[vk].npubData;
+    if(nd2&&nd2.name&&nd2.name.toLowerCase()===q){console.log('[DeepLink] name match at index '+vk);return village[vk];}
+  }
+  // 5. Debug: log all village hex values for comparison
+  console.log('[DeepLink] no match found. Village hex values:');
+  for(var vd=0;vd<Math.min(village.length,5);vd++){
+    console.log('  ['+vd+'] hex="'+village[vd].hex+'" npub="'+(village[vd].npubData?village[vd].npubData.npub.substring(0,30)+'...':'')+'"');
   }
   return null;
 }
 function tryDeepLinkEnterBuilding(){
   var key=deepLinkNpubRaw();
-  if(!key)return;
+  if(!key){console.log('[DeepLink] no deep link key found in URL');return;}
+  console.log('[DeepLink] raw key from URL: "'+key+'"');
   var b=findVillageBuildingByDeepLink(key);
-  if(b)enterBuilding(b);
+  if(b){
+    console.log('[DeepLink] found building, entering...');
+    enterBuilding(b);
+  }else{
+    console.log('[DeepLink] building not found for key: '+key);
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -4383,8 +4426,9 @@ function anim(){
   }
   renderer.render(scene,camera);
 }
-tryDeepLinkEnterBuilding();
 anim();
+// Deep link: delay slightly so render loop is running and camera transition works
+setTimeout(function(){tryDeepLinkEnterBuilding();},500);
 window.addEventListener('resize',function(){var w=window.innerWidth||800,h=window.innerHeight||600;camera.aspect=w/h;camera.updateProjectionMatrix();renderer.setSize(w,h);});
 
 // ═══════════════════════════════════════════════════════════════════════════
