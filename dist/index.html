@@ -1804,39 +1804,50 @@ searchIn.addEventListener('input',function(){
   if(q.length<2){searchRes.textContent='';searchNotes=[];searchQuery='';
     for(var ci=0;ci<radarCells.length;ci++){radarCells[ci].searchHit=false;}return;}
   searchDebounce=setTimeout(function(){
-    searchQuery=q;searchRes.textContent='Searching relay.nostr.band...';
+    searchQuery=q;searchRes.textContent='Searching...';
     if(searchWs){try{searchWs.close();}catch(e){}}
     searchNotes=[];
     var gotEose=false;
-    try{
-      searchWs=new WebSocket('wss://relay.nostr.band');
-      searchWs.onopen=function(){
-        searchWs.send(JSON.stringify(["REQ","s",{kinds:[1],search:q,limit:80}]));
-      };
-      searchWs.onmessage=function(e){
-        try{var m=JSON.parse(e.data);
-          if(m[0]==="EVENT"&&m[2]&&m[2].content&&!isJunkNote(m[2])){searchNotes.push(m[2]);}
-          if(m[0]==="EOSE"){
-            gotEose=true;
-            try{searchWs.send(JSON.stringify(["CLOSE","s"]));searchWs.close();}catch(ee){}
+    // Use Primal caching relay first (fast, reliable), then nostr.band as fallback
+    var searchRelays=['wss://relay.primal.net','wss://relay.nostr.band'];
+    var searchTried=0;
+    function trySearchRelay(){
+      if(searchTried>=searchRelays.length){localSearch(q);return;}
+      var url=searchRelays[searchTried++];
+      try{
+        searchWs=new WebSocket(url);
+        var wsOpened=false;
+        searchWs.onopen=function(){
+          wsOpened=true;
+          searchWs.send(JSON.stringify(["REQ","s",{kinds:[1],search:q,limit:80}]));
+          searchRes.textContent='Searching '+url.replace('wss://','')+'...';
+        };
+        searchWs.onmessage=function(e){
+          try{var m=JSON.parse(e.data);
+            if(m[0]==="EVENT"&&m[2]&&m[2].content&&!isJunkNote(m[2])){searchNotes.push(m[2]);}
+            if(m[0]==="EOSE"){
+              gotEose=true;
+              try{searchWs.send(JSON.stringify(["CLOSE","s"]));searchWs.close();}catch(ee){}
+              searchWs=null;
+              if(searchNotes.length>0){showSearchResults();}
+              else{trySearchRelay();} // no results — try next relay
+            }
+          }catch(ee){}
+        };
+        searchWs.onerror=function(){
+          if(!wsOpened){searchWs=null;trySearchRelay();}
+        };
+        setTimeout(function(){
+          if(!gotEose&&searchWs){
+            try{searchWs.close();}catch(ee){}
             searchWs=null;
-            showSearchResults();
+            if(searchNotes.length>0)showSearchResults();
+            else trySearchRelay();
           }
-        }catch(ee){}
-      };
-      searchWs.onerror=function(){
-        if(!gotEose){searchWs=null;localSearch(q);}
-      };
-      // Timeout fallback - if relay doesn't respond in 4s, search locally
-      setTimeout(function(){
-        if(!gotEose&&searchWs){
-          try{searchWs.close();}catch(ee){}
-          searchWs=null;
-          if(searchNotes.length>0)showSearchResults();
-          else localSearch(q);
-        }
-      },4000);
-    }catch(ee){localSearch(q);}
+        },4000);
+      }catch(ee){trySearchRelay();}
+    }
+    trySearchRelay();
   },600);
 });
 function localSearch(q){
@@ -2069,26 +2080,26 @@ function onToggleGarden(){
 setTimeout(function(){buildGMGarden();},100);
 // Fetch GM notes in background, update plants when they arrive
 setTimeout(function(){if(!gmFetched){gmFetched=true;fetchGMNotes();}},2000);
-// Fallback: if notes haven't arrived after 10s, use main relay notes
+// Fallback: if notes haven't arrived after 12s, filter main feed for actual GM notes
 setTimeout(function(){
   if(gmNotes.length<GM_PLANT_COUNT&&nostrNotes.length>0){
+    console.log('[GM Garden] 12s fallback — filtering main feed for GM notes');
     for(var i=0;i<nostrNotes.length&&gmNotes.length<GM_PLANT_COUNT;i++){
-      var c=(nostrNotes[i].content||'').toLowerCase().trim();
-      if(c.length>5&&c.length<300&&!gmNoteIds[nostrNotes[i].id]){
+      if(isValidGMNote(nostrNotes[i])&&!gmNoteIds[nostrNotes[i].id]){
         gmNoteIds[nostrNotes[i].id]=true;
         gmNotes.push(nostrNotes[i]);
       }
     }
+    console.log('[GM Garden] Found '+gmNotes.length+' unique GM notes in main feed');
     if(gmNotes.length>0)updateGardenNotes();
   }
-},10000);
+},12000);
 // Periodic retry: every 15s, scan main feed for new unique GM notes until all plants are filled
 var gmRetryInterval=setInterval(function(){
   if(gmNotes.length>=GM_PLANT_COUNT){clearInterval(gmRetryInterval);return;}
   var added=0;
   for(var i=0;i<nostrNotes.length&&gmNotes.length<GM_PLANT_COUNT;i++){
-    var c=(nostrNotes[i].content||'').toLowerCase().trim();
-    if(c.length>5&&c.length<300&&!gmNoteIds[nostrNotes[i].id]){
+    if(isValidGMNote(nostrNotes[i])&&!gmNoteIds[nostrNotes[i].id]){
       gmNoteIds[nostrNotes[i].id]=true;
       gmNotes.push(nostrNotes[i]);added++;
     }
@@ -2100,43 +2111,87 @@ var gmRetryInterval=setInterval(function(){
   if(gmNotes.length>=GM_PLANT_COUNT)clearInterval(gmRetryInterval);
 },15000);
 
+// GM note content validation — must actually contain "gm" or "good morning"
+function isValidGMNote(note){
+  if(!note||!note.content)return false;
+  var c=note.content.toLowerCase().trim();
+  if(c.length>300||c.length<1)return false;
+  // Must start with or contain "gm" or "good morning" as a distinct word
+  if(/\bgm\b/i.test(c)||/\bgood\s*morning\b/i.test(c))return true;
+  return false;
+}
+
 function fetchGMNotes(){
-  try{
-    var ws=new WebSocket('wss://relay.nostr.band');
-    ws.onopen=function(){ws.send(JSON.stringify(["REQ","gm",{kinds:[1],search:"gm",limit:40}]));};
-    ws.onmessage=function(e){
-      try{var m=JSON.parse(e.data);
-        if(m[0]==="EVENT"&&m[2]&&m[2].content){
-          var c=m[2].content.toLowerCase().trim();
-          if(c.length<200&&(/^gm\b/i.test(c)||/^good\s*morning/i.test(c))&&!gmNoteIds[m[2].id]){
-            gmNoteIds[m[2].id]=true;
-            gmNotes.push(m[2]);
-            if(!profileCache[m[2].pubkey]){
-              try{ws.send(JSON.stringify(["REQ","gp"+gmNotes.length,{kinds:[0],authors:[m[2].pubkey],limit:1}]));}catch(ee){}
+  // Strategy: use Primal caching relay with NIP-50 search for "gm" notes
+  // Then strictly validate each note's content before including
+  var relays=['wss://relay.primal.net','wss://relay.nostr.band','wss://relay.damus.io'];
+  var tried=0;
+  function tryRelay(){
+    if(tried>=relays.length){
+      // All relays failed — fall back to filtering main feed
+      console.log('[GM Garden] All relays failed, filtering main feed');
+      for(var i=0;i<nostrNotes.length&&gmNotes.length<21;i++){
+        if(isValidGMNote(nostrNotes[i]))gmNotes.push(nostrNotes[i]);
+      }
+      if(gmNotes.length>0)updateGardenNotes();
+      return;
+    }
+    var url=relays[tried++];
+    console.log('[GM Garden] Trying '+url+'...');
+    try{
+      var ws=new WebSocket(url);
+      var opened=false;var gotEose=false;
+      ws.onopen=function(){
+        opened=true;
+        // Use NIP-50 search if supported (Primal and nostr.band support it)
+        ws.send(JSON.stringify(["REQ","gm",{kinds:[1],search:"gm good morning",limit:80}]));
+      };
+      ws.onmessage=function(e){
+        try{var m=JSON.parse(e.data);
+          if(m[0]==="EVENT"&&m[2]&&m[2].content){
+            // Strictly validate — only accept notes that actually say "gm" or "good morning"
+            if(isValidGMNote(m[2])){
+              gmNotes.push(m[2]);
+              if(!profileCache[m[2].pubkey]){
+                try{ws.send(JSON.stringify(["REQ","gp"+gmNotes.length,{kinds:[0],authors:[m[2].pubkey],limit:1}]));}catch(ee){}
+              }
             }
           }
+          if(m[0]==="EVENT"&&m[2]&&m[2].kind===0){
+            try{var p=JSON.parse(m[2].content);profileCache[m[2].pubkey]={name:p.name||p.display_name||'',picture:p.picture||''};
+              if(p.picture)loadProfileImg(m[2].pubkey,p.picture);}catch(pe){}
+          }
+          if(m[0]==="EOSE"&&m[1]==="gm"){
+            gotEose=true;
+            ws.send(JSON.stringify(["CLOSE","gm"]));
+            console.log('[GM Garden] Got '+gmNotes.length+' valid GM notes from '+url);
+            if(gmNotes.length>=5){
+              // Good enough — use these
+              setTimeout(function(){try{ws.close();}catch(ee){}updateGardenNotes();},1500);
+            }else{
+              // Not enough — try next relay
+              try{ws.close();}catch(ee){}
+              tryRelay();
+            }
+          }
+        }catch(ee){}
+      };
+      ws.onerror=function(){
+        console.log('[GM Garden] '+url+' failed');
+        if(!opened)tryRelay();
+      };
+      // Timeout: if no response in 5s, try next relay
+      setTimeout(function(){
+        if(!gotEose){
+          console.log('[GM Garden] '+url+' timed out');
+          try{ws.close();}catch(ee){}
+          if(gmNotes.length>=5){updateGardenNotes();}
+          else{tryRelay();}
         }
-        if(m[0]==="EVENT"&&m[2]&&m[2].kind===0){
-          try{var p=JSON.parse(m[2].content);profileCache[m[2].pubkey]={name:p.name||p.display_name||'',picture:p.picture||''};
-            if(p.picture)loadProfileImg(m[2].pubkey,p.picture);}catch(pe){}
-        }
-        if(m[0]==="EOSE"&&m[1]==="gm"){
-          ws.send(JSON.stringify(["CLOSE","gm"]));
-          setTimeout(function(){ws.close();updateGardenNotes();},1500);
-        }
-      }catch(ee){}
-    };
-    ws.onerror=function(){
-      for(var i=0;i<nostrNotes.length&&gmNotes.length<GM_PLANT_COUNT;i++){
-        var c=nostrNotes[i].content.toLowerCase().trim();
-        if(c.length<200&&(/^gm\b/i.test(c)||/^good\s*morning/i.test(c))&&!gmNoteIds[nostrNotes[i].id]){
-          gmNoteIds[nostrNotes[i].id]=true;
-          gmNotes.push(nostrNotes[i]);
-        }
-      }
-      updateGardenNotes();
-    };
-  }catch(ee){}
+      },5000);
+    }catch(ee){tryRelay();}
+  }
+  tryRelay();
 }
 
 function updateGardenNotes(){
@@ -2144,8 +2199,9 @@ function updateGardenNotes(){
   for(var i=0;i<gmPlants.length;i++){
     if(i<gmNotes.length){
       var n=gmNotes[i];
-      gmPlants[i].note=n;
-      try{if(gmPlants[i].hitBox&&gmPlants[i].hitBox.userData)gmPlants[i].hitBox.userData.gmNote=n;}catch(e){}
+      var gp=gmPlants[i];if(!gp)continue;
+      gp.note=n;
+      try{if(gp.hitBox&&gp.hitBox.userData)gp.hitBox.userData.gmNote=n;}catch(e){}
       // Update name tag
       var prof=profileCache[n.pubkey];
       var nameStr=prof&&prof.name?prof.name:'GM #'+(i+1);
@@ -2153,8 +2209,8 @@ function updateGardenNotes(){
       var nctx=nlc.getContext('2d');nctx.fillStyle='rgba(0,255,200,0.5)';nctx.font='bold 10px Courier New';
       nctx.fillText(nameStr.substring(0,12),4,18);
       var ntex=new THREE.CanvasTexture(nlc);ntex.minFilter=THREE.LinearFilter;
-      if(gmPlants[i].nameSprite){
-        gmPlants[i].nameSprite.material.map=ntex;gmPlants[i].nameSprite.material.needsUpdate=true;
+      if(gp.nameSprite){
+        gp.nameSprite.material.map=ntex;gp.nameSprite.material.needsUpdate=true;
       }
     }
   }
@@ -2799,74 +2855,76 @@ function onToggleBanjo(){
 // TECHNO-AMISH VILLAGE – 21 buildings with enterable interiors
 // ═══════════════════════════════════════════════════════════════
 var VILLAGE_NPUBS=[
-  {npub:'npub1sg6plzptd64u62a878hep2kev3zqh0tngrrlg993pg3wfqknskqmqsnm29',name:'jack'},
-  {npub:'npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsyjh6w6',name:'fiatjaf'},
-  {npub:'npub1xtscya34g58tk0z605fvr788k263gsu6cy9x0mhnm87echrgufzsaxk5xl',name:'jb55'},
-  {npub:'npub1qny3tkh0acurzla8x3zy4nhrjz5zd8l9sy9jys09umwng00manysew95gx',name:'ODELL'},
+  // ── BUSINESSES (indices 0–11): around the central square ──
+  {npub:'npub1sweetl0gskmka0n5qevt7v2wj9q56ntwkmaeywffw4ftaucmcakquhns6h',name:'Sweet Sats'},
+  {npub:'npub1m8pw94xduq3rtlx4fq648dtddz5je0hxerm2xc9rdd4zdq28gzqsg8gqln',name:'Seed Vault Market'},
+  {npub:'npub14dcps797lsnqjl7d6fetkuq6a0068538e2kgt55vt4zdapxk638qj7wcyy',name:'JohnnyMilkweed'},
+  {npub:'npub1vycqsl0ya8mrpak8wk2lhn477eh05qmhe0lkp9aqsnf5c9s08xcszxgjv5',name:'Snorkel Hot Tubs'},
+  {npub:'npub153xmex42x4chdf757hp3q6zxagykkek7pdgwuwd074964dkyha9s82ryu8',name:'Ben Justman Wine'},
+  {npub:'npub1n8805ezmqzqhxuernt4mjmfdrxgzgjv5uhjk24nvstqyhrwxtd2qj9teq3',name:'Great Ghee'},
+  {npub:'npub1zzmxvr9sw49lhzfx236aweurt8h5tmzjw7x3gfsazlgd8j64ql0sexw5wy',name:'Soap Miner'},
+  {npub:'npub1v0tfjv5ahr3c260jtzdk5w48krerrnkg8fmcnc5lpguk0qda04eqzm3m3e',name:'Leathermint'},
+  {npub:'npub1ndketdm2qyv35nrhsxzks8kh7w7w6tll4rjp29hv0qjqkgfjsh6snmgk2v',name:'Madex Art'},
+  {npub:'npub1rpfds03tn5f054sswxl7zk0lttj3ptclex63hp2nnjm2s9yx7grsxtjurw',name:'Bitcoin Butcher'},
+  {npub:'npub1k8s3skyy5mg5h07w8zvuk5lgrqadmejz7fjdpl60zaznw8sxzdxqxm6y88',name:'Solo Satoshi'},
+  {npub:'npub1a6zkqnuwcmjwynuw4u4xyngy9675x8dwgj87z9me4h8mdwmc2a0q8mvhjk',name:'Satoshi Coffee'},
+  // ── VILLAGERS (indices 12–27): off the square ──
+  {npub:'npub1rtlqca8r6auyaw5n5h3l5422dm4sry5dzfee4696fqe8s6qgudks7djtfs',name:'Hodl'},
+  {npub:'npub1sg6plzptd64u62a878hep2kev88swjh3tw00gjsfl8f237lmu63q0uf63m',name:'Jack'},
   {npub:'npub1dergggklka99wwrs92yz8wdjs952h2ux2ha2ed598ngwu9w7a6fsh9xzpc',name:'Gigi'},
-  {npub:'npub1g53mukxnjkcmr94fhryzkqutdz2ukq4ks0gvy5af25rgmwsl4ngq43drvk',name:'Martti Malmi'},
-  {npub:'npub1az9xj85cmxv8e9j9y80grber6p85srpul94t4e3q28z0h0d70w0sflj7kw',name:'NVK'},
-  {npub:'npub1l2vyh47mk2p0qlsku7hg0vn29faehy9hy34ygaclpn66ukqp3afqutajft',name:'Pablo'},
-  {npub:'npub18ams6ewn5aj2n3wt2qawzglx9mr4nzksxhvrdc4vc4elk34dd6kqpfw06t',name:'Derek Ross'},
-  {npub:'npub1sn0wdenkukak0d9dfczzeacvhkrgz92ak56egt7vdgzn8pv2wfqqhrjdv9',name:'Snowden'},
+  {npub:'npub1qny3tkh0acurzla8x3zy4nhrjz5zd8l9sy9jys09umwng00manysew95gx',name:'Odell'},
+  {npub:'npub18ams6ewn5aj2n3wt2qawzglx9mr4nzksxhvrdc4gzrecw7n5tvjqctp424',name:'Derek Ross'},
+  {npub:'npub1xtscya34g58tk0z605fvr788k263gsu6cy9x0mhnm87echrgufzsevkk5s',name:'Jb55'},
+  {npub:'npub1x458tl7h9xcxa66vr4a8pg0h2qz96pnhwnfpcra0le9090uk5t5qw7armt',name:'Laser'},
+  {npub:'npub1f5pre6wl6ad87vr4hr5wppqq30sh58m4p33mthnjreh03qadcajs7gwt3z',name:'revHodl'},
+  {npub:'npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsyjh6w6',name:'Fiatjaf'},
+  {npub:'npub1gcxzte5zlkncx26j68ez60fzkvtkm9e0vrwdcvsjakxf9mu9qewqlfnj5z',name:'Vitor'},
+  {npub:'npub1az9xj85cmxv8e9j9y80lvqp97crsqdu2fpu3srwthd99qfu9qsgstam8y8',name:'NVK'},
   {npub:'npub1a2cww4kn9wqte4ry70vyfsuqq6qu7wdrain0n2gkd3t3gxc5lf0sa7kzjn',name:'Lyn Alden'},
-  {npub:'npub1hu3hdctm5nkzd8gslnyedfr5ddz3z547dp6h3utyd6vfnlev8tgs2e4phy',name:'carla'},
-  {npub:'npub12rv5lskctqxxs2c8rf2zlzc7xx3qpvzs3w4etgemasvyujhffrwsq0rnwy',name:'Kukks'},
-  {npub:'npub1gcxzte5zlkncx26j68ez60fzkvtkm9e0vrwdcvsjakxf9mu9qewqlfnj5z',name:'Ben Arc'},
-  {npub:'npub1nstrcu63lzpjkz94djajuz2evrgu2psd66cwgc0284cql0cqsq35qjkpt3',name:'nostrudel'},
-  {npub:'npub1rxysxnjkhrmqd3ey73dp9n5y5yvyzcs64csg0v44cfkesgzy85yqq7yt4zn',name:'Karnage'},
-  {npub:'npub1v0lxxxxutpvrelsksy8cdhgfux9l6a42hsj2qzquu2zk7vc9qnkszrqj49',name:'Vitor Pamplona'},
-  {npub:'npub1s5yq6wadwrxde4lhfs56gn64hwzhhqpp7pz2lfyj3aqn57lcs4nq7rqcwq',name:'McShane'},
-  {npub:'npub1wmr34t36fy03m8hvgl96zl3znndyzyaqhwmwdtshwmtkg03fetc5qmx03f',name:'BTCsessions'},
-  {npub:'npub1lunaq893u4hmtpvqxpk8hfmtkqmm7ggutdezjl6ausp6ykfvr3cqwjzuae',name:'hodlbod'},
-  {npub:'npub1sg6plzptd64u62a878hep2kev3zqh0tngrrlg993pg3wfqknskqmqsnm29',name:'Gigi (store)'},
-  {npub:'npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsyjh6w6',name:'fiatjaf (workshop)'},
-  {npub:'npub1xtscya34g58tk0z605fvr788k263gsu6cy9x0mhnm87echrgufzsaxk5xl',name:'jb55 (lab)'},
-  {npub:'npub1qny3tkh0acurzla8x3zy4nhrjz5zd8l9sy9jys09umwng00manysew95gx',name:'ODELL (tavern)'},
-  {npub:'npub1dergggklka99wwrs92yz8wdjs952h2ux2ha2ed598ngwu9w7a6fsh9xzpc',name:'Gigi (library)'},
-  {npub:'npub1g53mukxnjkcmr94fhryzkqutdz2ukq4ks0gvy5af25rgmwsl4ngq43drvk',name:'Martti (smithy)'},
-  {npub:'npub1az9xj85cmxv8e9j9y80grber6p85srpul94t4e3q28z0h0d70w0sflj7kw',name:'NVK (bank)'},
-  {npub:'npub1l2vyh47mk2p0qlsku7hg0vn29faehy9hy34ygaclpn66ukqp3afqutajft',name:'Pablo (chapel)'},
+  {npub:'npub1l2vyh47mk2p0qlsku7hg0vn29faehy9hy34ygaclpn66ukqp3afqutajft',name:'Pablo'},
+  {npub:'npub1cj8znuztfqkvq89pl8hceph0svvvqk0qay6nydgk9uyq7fhpfsgsqwrz4u',name:'Walker'},
+  {npub:'npub12rv5lskctqxxs2c8rf2zlzc7xx3qpvzs3w4etgemauy9thegr43sf485vg',name:'Calle'},
+  {npub:'npub1x3w5ty7cdrcznw4nn3ylexc35as3ky953fj7s9gns8f3zklajhdsl2mh3r',name:'Royster'},
 ];
 // Village center at (120,0). Main street runs E-W, cross streets N-S.
 // Entrances: clear gap at west (road from barn), north, south, east
 var VILLAGE_CX=120,VILLAGE_CZ=0;
 var BLDG_LAYOUTS=[
-  // ── North side of square – mixed storefronts ──
-  {x:-22,z:-18,ry:0,w:7,d:6,h:3.5,roof:5.5,type:'house'},
-  {x:-11,z:-18,ry:0,w:12,d:9,h:5.5,roof:8.5,type:'shop'},  // large general store
-  {x:11,z:-18,ry:0,w:10,d:8,h:5,roof:7.5,type:'shop'},      // bakery
-  {x:23,z:-18,ry:0,w:7,d:6,h:4,roof:6,type:'house'},
-  // ── South side – town hall and shops ──
-  {x:-22,z:18,ry:Math.PI,w:8,d:7,h:4,roof:6.5,type:'house'},
-  {x:-10,z:18,ry:Math.PI,w:14,d:10,h:6,roof:9,type:'shop'}, // town hall / large shop
+  // ── North side of square – businesses (Sweet Sats, Seed Vault, JohnnyMilkweed, Snorkel) ──
+  {x:-22,z:-18,ry:0,w:7,d:6,h:3.5,roof:5.5,type:'shop'},
+  {x:-11,z:-18,ry:0,w:12,d:9,h:5.5,roof:8.5,type:'shop'},
+  {x:11,z:-18,ry:0,w:10,d:8,h:5,roof:7.5,type:'shop'},
+  {x:23,z:-18,ry:0,w:7,d:6,h:4,roof:6,type:'shop'},
+  // ── South side of square – businesses (Ben Justman, Great Ghee, Soap Miner, Leathermint) ──
+  {x:-22,z:18,ry:Math.PI,w:8,d:7,h:4,roof:6.5,type:'shop'},
+  {x:-10,z:18,ry:Math.PI,w:14,d:10,h:6,roof:9,type:'shop'},
   {x:10,z:18,ry:Math.PI,w:9,d:7,h:4.5,roof:7,type:'shop'},
-  {x:23,z:18,ry:Math.PI,w:7,d:6,h:3.5,roof:5.5,type:'house'},
-  // ── East side ──
-  {x:32,z:-12,ry:-Math.PI/2,w:8,d:7,h:4,roof:6.5,type:'house'},
-  {x:32,z:12,ry:-Math.PI/2,w:7,d:6,h:3.5,roof:5.5,type:'house'},
-  // ── West side ──
+  {x:23,z:18,ry:Math.PI,w:7,d:6,h:3.5,roof:5.5,type:'shop'},
+  // ── East side of square – businesses (Madex Art, Bitcoin Butcher) ──
+  {x:32,z:-12,ry:-Math.PI/2,w:8,d:7,h:4,roof:6.5,type:'shop'},
+  {x:32,z:12,ry:-Math.PI/2,w:7,d:6,h:3.5,roof:5.5,type:'shop'},
+  // ── West side of square – businesses (Solo Satoshi, Satoshi Coffee) ──
   {x:-32,z:-12,ry:Math.PI/2,w:9,d:7,h:4.5,roof:7,type:'shop'},
-  {x:-32,z:12,ry:Math.PI/2,w:7,d:6,h:4,roof:6,type:'house'},
-  // ── North street – church at the end ──
+  {x:-32,z:12,ry:Math.PI/2,w:7,d:6,h:4,roof:6,type:'shop'},
+  // ── North street – villagers (Hodl, Jack, Gigi's church, Odell) ──
   {x:-7,z:-32,ry:Math.PI/2,w:7,d:6,h:3.5,roof:5.5,type:'house'},
   {x:7,z:-32,ry:-Math.PI/2,w:8,d:7,h:4,roof:6.5,type:'house'},
-  {x:0,z:-48,ry:0,w:10,d:14,h:6,roof:10,type:'church'},     // church with steeple
-  {x:7,z:-44,ry:-Math.PI/2,w:6,d:5,h:3,roof:5,type:'house'}, // small cottage
-  // ── South street ──
+  {x:0,z:-48,ry:0,w:10,d:14,h:6,roof:10,type:'church'},
+  {x:7,z:-44,ry:-Math.PI/2,w:6,d:5,h:3,roof:5,type:'house'},
+  // ── South street – villagers (Derek Ross, Jb55, Laser, revHodl) ──
   {x:-7,z:32,ry:Math.PI/2,w:8,d:7,h:4,roof:6.5,type:'house'},
-  {x:7,z:32,ry:-Math.PI/2,w:11,d:8,h:5,roof:7.5,type:'shop'},
+  {x:7,z:32,ry:-Math.PI/2,w:11,d:8,h:5,roof:7.5,type:'house'},
   {x:-7,z:44,ry:Math.PI/2,w:6,d:5,h:3,roof:5,type:'house'},
   {x:7,z:44,ry:-Math.PI/2,w:7,d:6,h:4,roof:6,type:'house'},
-  // ── East road ──
+  // ── East road – villagers (Fiatjaf, Vitor, NVK, Lyn Alden) ──
   {x:44,z:-7,ry:0,w:8,d:7,h:4,roof:6.5,type:'house'},
-  {x:44,z:7,ry:Math.PI,w:10,d:8,h:5,roof:7.5,type:'shop'},
+  {x:44,z:7,ry:Math.PI,w:10,d:8,h:5,roof:7.5,type:'house'},
   {x:56,z:-7,ry:0,w:6,d:5,h:3,roof:5,type:'house'},
   {x:56,z:7,ry:Math.PI,w:7,d:6,h:4,roof:6,type:'house'},
-  // ── Approach road ──
+  // ── Approach road – villagers (Pablo, Walker, Calle, Royster) ──
   {x:-46,z:-8,ry:0,w:7,d:6,h:3.5,roof:5.5,type:'house'},
   {x:-46,z:8,ry:Math.PI,w:8,d:7,h:4,roof:6.5,type:'house'},
-  {x:-58,z:-8,ry:0,w:9,d:7,h:4.5,roof:7,type:'shop'},
+  {x:-58,z:-8,ry:0,w:9,d:7,h:4.5,roof:7,type:'house'},
   {x:-58,z:8,ry:Math.PI,w:6,d:5,h:3,roof:5,type:'house'},
 ];
 
@@ -3865,57 +3923,332 @@ function createFrameBuilding(wx,wz,w,d,h,progress,label){
   scene.add(fg);
 }
 
-// Plots along the riverside road (at various river t-positions)
-var rsPlots=[
-  {t:0.12,progress:0.85,w:7,d:6,h:4,label:'Riverside Cottage #1'},
-  {t:0.18,progress:0.55,w:8,d:7,h:4.5,label:'River Workshop'},
-  {t:0.35,progress:0.3,w:7,d:6,h:4,label:'Fisher\'s House'},
-  {t:0.55,progress:0.7,w:9,d:7,h:5,label:'Riverside Inn'},
-  {t:0.62,progress:0.15,w:7,d:6,h:4,label:'Plot #5'},
-  {t:0.72,progress:0,w:8,d:7,h:4,label:'Plot #6 — FOR SALE'},
-  {t:0.78,progress:0.45,w:7,d:6,h:4,label:'Carpenter\'s Shop'},
-  {t:0.85,progress:0,w:9,d:8,h:5,label:'Plot #8 — FOR SALE'},
-  {t:0.92,progress:0,w:7,d:6,h:4,label:'Plot #9 — FOR SALE'},
-];
-for(var rpi=0;rpi<rsPlots.length;rpi++){
-  var rpl=rsPlots[rpi];
-  var rpp=sampleRiver(rpl.t);var rpn=riverNormal(rpl.t);
-  var plotX=rpp.x-rpn.x*(riverW/2+14);
-  var plotZ=rpp.z-rpn.z*(riverW/2+14);
-  createFrameBuilding(plotX,plotZ,rpl.w,rpl.d,rpl.h,rpl.progress,rpl.label);
-}
+// ═══════════════════════════════════════════════════════════════════════════
+// §23 FRONTIER LOTS — 12 claimable lots across the river
+//     Zap note 5af36a5ec78a476ff... with ≥1000 sats → your house gets built
+//     Fetches kind:9735 zap receipts, oldest 12 qualifying zappers get houses
+// ═══════════════════════════════════════════════════════════════════════════
+var FRONTIER_NOTE_ID='5af36a5ec78a476ff878f5da50dc30cb5b085a3234186fe28f79540851f4a3c5';
+var FRONTIER_NOTE_PUBKEY='bbf94c83c69f7334ffdaed550a9729b94347d22b050a213336a818c2620d6243';
+var FRONTIER_MIN_SATS=1000;
+var FRONTIER_MAX_LOTS=12;
 
-// Empty plots (just stakes in the ground with signs)
-function createEmptyPlot(wx,wz,w,d,label){
-  var pg=new THREE.Group();pg.position.set(wx,0,wz);
+// 12 lot definitions along the riverside road
+var frontierLots=[
+  {t:0.08,w:7,d:6,h:4,label:'Frontier Lot #1'},
+  {t:0.15,w:8,d:7,h:4.5,label:'Frontier Lot #2'},
+  {t:0.22,w:7,d:6,h:4,label:'Frontier Lot #3'},
+  {t:0.30,w:9,d:7,h:5,label:'Frontier Lot #4'},
+  {t:0.38,w:7,d:6,h:4,label:'Frontier Lot #5'},
+  {t:0.46,w:8,d:7,h:4.5,label:'Frontier Lot #6'},
+  {t:0.55,w:7,d:6,h:4,label:'Frontier Lot #7'},
+  {t:0.63,w:9,d:8,h:5,label:'Frontier Lot #8'},
+  {t:0.71,w:7,d:6,h:4,label:'Frontier Lot #9'},
+  {t:0.78,w:8,d:7,h:4.5,label:'Frontier Lot #10'},
+  {t:0.85,w:7,d:6,h:4,label:'Frontier Lot #11'},
+  {t:0.92,w:8,d:7,h:4,label:'Frontier Lot #12'},
+];
+
+// Track lot state: {group, wx, wz, claimed, ownerPubkey, ownerName, hitMesh, labelSprite, labelCanvas, labelTex}
+var frontierLotState=[];
+
+// Build all 12 lots as unclaimed (frame buildings / empty plots)
+for(var fli=0;fli<frontierLots.length;fli++){
+  var fl=frontierLots[fli];
+  var fpp=sampleRiver(fl.t);var fpn=riverNormal(fl.t);
+  // Alternate between closer (14) and further (20) from river for variety
+  var dist=fli%2===0?14:20;
+  var plotX=fpp.x-fpn.x*(riverW/2+dist);
+  var plotZ=fpp.z-fpn.z*(riverW/2+dist);
+
+  var fg=new THREE.Group();fg.position.set(plotX,0,plotZ);
+  var w=fl.w,d=fl.d,h=fl.h;
+
+  // Foundation
+  var found=new THREE.Mesh(new THREE.BoxGeometry(w+0.5,0.15,d+0.5),frameSolid.clone());
+  found.position.y=0.08;
+  found.add(new THREE.LineSegments(new THREE.EdgesGeometry(found.geometry,15),frameMat.clone()));fg.add(found);
+
   // Corner stakes
   for(var cx=-1;cx<=1;cx+=2){for(var cz=-1;cz<=1;cz+=2){
-    var stake=new THREE.Mesh(new THREE.BoxGeometry(0.08,0.8,0.08),frameSolid.clone());
-    stake.position.set(cx*w/2,0.4,cz*d/2);
+    var stake=new THREE.Mesh(new THREE.BoxGeometry(0.1,1.2,0.1),frameSolid.clone());
+    stake.position.set(cx*w/2,0.6,cz*d/2);
     stake.add(new THREE.LineSegments(new THREE.EdgesGeometry(stake.geometry,15),
       new THREE.LineBasicMaterial({color:0xff8844,transparent:true,opacity:0.4})));
-    pg.add(stake);
+    fg.add(stake);
   }}
-  // String between stakes
-  var stringPts=[new THREE.Vector3(-w/2,0.7,-d/2),new THREE.Vector3(w/2,0.7,-d/2),
-    new THREE.Vector3(w/2,0.7,d/2),new THREE.Vector3(-w/2,0.7,d/2),new THREE.Vector3(-w/2,0.7,-d/2)];
-  pg.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(stringPts),
+
+  // String outline
+  var stringPts=[new THREE.Vector3(-w/2,1,-d/2),new THREE.Vector3(w/2,1,-d/2),
+    new THREE.Vector3(w/2,1,d/2),new THREE.Vector3(-w/2,1,d/2),new THREE.Vector3(-w/2,1,-d/2)];
+  fg.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(stringPts),
     new THREE.LineBasicMaterial({color:0xff6600,transparent:true,opacity:0.2})));
-  // Sign
-  var sc=document.createElement('canvas');sc.width=256;sc.height=64;
-  var sctx=sc.getContext('2d');sctx.fillStyle='#ff8844';sctx.font='bold 14px Courier New';sctx.fillText(label,10,25);
-  sctx.fillStyle='rgba(255,136,0,0.4)';sctx.font='11px Courier New';sctx.fillText('Build your nostr house here',10,48);
-  var stex=new THREE.CanvasTexture(sc);stex.minFilter=THREE.LinearFilter;
-  var sspr=new THREE.Sprite(new THREE.SpriteMaterial({map:stex,transparent:true,opacity:0.75}));
-  sspr.scale.set(6,1.4,1);sspr.position.set(0,2,0);pg.add(sspr);
-  scene.add(pg);
+
+  // Scattered building materials
+  for(var si=0;si<2;si++){
+    var slab=new THREE.Mesh(new THREE.BoxGeometry(1.2+Math.random(),0.12,0.3+Math.random()*0.2),frameSolid.clone());
+    slab.position.set(w/2+1+Math.random()*1.5,si*0.13,Math.random()*d-d/2);slab.rotation.y=Math.random()*0.3;
+    slab.add(new THREE.LineSegments(new THREE.EdgesGeometry(slab.geometry,15),frameMat.clone()));fg.add(slab);
+  }
+
+  // Label sprite (will be updated when claimed)
+  var flc=document.createElement('canvas');flc.width=512;flc.height=64;
+  var flctx=flc.getContext('2d');
+  flctx.fillStyle='#ff8844';flctx.font='bold 16px Courier New';flctx.fillText(fl.label,10,24);
+  flctx.fillStyle='rgba(255,136,0,0.45)';flctx.font='12px Courier New';
+  flctx.fillText('\u26A1 Zap 1000+ sats to claim this lot!',10,48);
+  var fltex=new THREE.CanvasTexture(flc);fltex.minFilter=THREE.LinearFilter;
+  var flspr=new THREE.Sprite(new THREE.SpriteMaterial({map:fltex,transparent:true,opacity:0.75}));
+  flspr.scale.set(10,1.2,1);flspr.position.set(0,3,0);fg.add(flspr);
+
+  // Hit mesh for hover/click detection
+  var hitGeo=new THREE.BoxGeometry(w+2,h+2,d+2);
+  var hitMesh=new THREE.Mesh(hitGeo,new THREE.MeshBasicMaterial({transparent:true,opacity:0}));
+  hitMesh.position.set(0,(h+2)/2,0);hitMesh.userData={frontierIdx:fli};
+  fg.add(hitMesh);
+
+  scene.add(fg);
+  frontierLotState.push({
+    group:fg,wx:plotX,wz:plotZ,w:w,d:d,h:h,
+    claimed:false,ownerPubkey:null,ownerName:null,
+    hitMesh:hitMesh,labelSprite:flspr,labelCanvas:flc,labelTex:fltex,
+    lotData:fl
+  });
 }
-// A few more empty plots further along the river
-for(var epi=0;epi<3;epi++){
-  var ept=0.08+epi*0.35;
-  var epp=sampleRiver(ept);var epn=riverNormal(ept);
-  createEmptyPlot(epp.x-epn.x*(riverW/2+22),epp.z-epn.z*(riverW/2+22),8,7,'Riverside Lot '+(epi+10));
+
+// ── Fetch zap receipts for the frontier note ──
+var frontierZapsFetched=false;
+var frontierZappers=[]; // [{pubkey,amount,created_at}] sorted oldest first
+
+function fetchFrontierZaps(){
+  if(frontierZapsFetched)return;frontierZapsFetched=true;
+  console.log('[Frontier] Fetching zap receipts for note '+FRONTIER_NOTE_ID.substring(0,16)+'...');
+  try{
+    var ws=new WebSocket('wss://relay.primal.net');
+    var zapEvents=[];
+    ws.onopen=function(){
+      ws.send(JSON.stringify(["REQ","frzaps",{kinds:[9735],"#e":[FRONTIER_NOTE_ID],limit:100}]));
+    };
+    ws.onmessage=function(e){
+      try{var m=JSON.parse(e.data);
+        if(m[0]==="EVENT"&&m[2]&&m[2].kind===9735){
+          zapEvents.push(m[2]);
+        }
+        if(m[0]==="EOSE"&&m[1]==="frzaps"){
+          ws.send(JSON.stringify(["CLOSE","frzaps"]));ws.close();
+          processFrontierZaps(zapEvents);
+        }
+      }catch(ee){}
+    };
+    ws.onerror=function(){
+      console.log('[Frontier] Relay connection failed, trying fallback...');
+      // Try a second relay
+      try{
+        var ws2=new WebSocket('wss://relay.damus.io');
+        ws2.onopen=function(){ws2.send(JSON.stringify(["REQ","frzaps",{kinds:[9735],"#e":[FRONTIER_NOTE_ID],limit:100}]));};
+        ws2.onmessage=function(e){
+          try{var m=JSON.parse(e.data);
+            if(m[0]==="EVENT"&&m[2]&&m[2].kind===9735)zapEvents.push(m[2]);
+            if(m[0]==="EOSE"){ws2.send(JSON.stringify(["CLOSE","frzaps"]));ws2.close();processFrontierZaps(zapEvents);}
+          }catch(ee){}
+        };
+      }catch(ee2){}
+    };
+  }catch(ee){console.log('[Frontier] Error: '+ee);}
 }
+
+function processFrontierZaps(zapEvents){
+  console.log('[Frontier] Processing '+zapEvents.length+' zap receipt events');
+  var qualifying=[];
+  for(var zi=0;zi<zapEvents.length;zi++){
+    var evt=zapEvents[zi];
+    var tags=evt.tags||[];
+    var senderPubkey=null;var amount=0;var createdAt=evt.created_at||0;
+
+    // Extract sender from description tag (the original kind:9734 zap request)
+    for(var ti=0;ti<tags.length;ti++){
+      if(tags[ti][0]==='description'){
+        try{
+          var desc=JSON.parse(tags[ti][1]);
+          senderPubkey=desc.pubkey||null;
+          // Get amount from the zap request tags
+          var descTags=desc.tags||[];
+          for(var dti=0;dti<descTags.length;dti++){
+            if(descTags[dti][0]==='amount'){
+              amount=Math.floor(parseInt(descTags[dti][1])/1000); // msats → sats
+            }
+          }
+        }catch(pe){}
+      }
+      // Fallback: try bolt11 for amount
+      if(tags[ti][0]==='bolt11'&&amount===0){
+        try{
+          var b11=tags[ti][1];
+          // Parse lnbc amount: lnbc<amount><multiplier>
+          var amtMatch=b11.match(/^lnbc(\d+)([munp]?)/i);
+          if(amtMatch){
+            var raw=parseInt(amtMatch[1]);var mult=amtMatch[2]||'';
+            if(mult==='m')amount=raw*100000; // milli-btc → sats (×100,000)
+            else if(mult==='u')amount=raw*100; // micro-btc → sats (×100)
+            else if(mult==='n')amount=Math.floor(raw/10); // nano-btc → sats (÷10)
+            else if(mult==='p')amount=Math.floor(raw/10000); // pico-btc → sats (÷10000)
+            else amount=raw*100000000; // btc → sats
+          }
+        }catch(be){}
+      }
+      // Also try P tag for sender as fallback
+      if(tags[ti][0]==='P'&&!senderPubkey){senderPubkey=tags[ti][1];}
+    }
+
+    if(senderPubkey&&amount>=FRONTIER_MIN_SATS){
+      // Deduplicate: only first zap per sender
+      var dup=false;
+      for(var qi=0;qi<qualifying.length;qi++){
+        if(qualifying[qi].pubkey===senderPubkey){dup=true;break;}
+      }
+      if(!dup){
+        qualifying.push({pubkey:senderPubkey,amount:amount,created_at:createdAt});
+        console.log('[Frontier] Qualifying zap: '+senderPubkey.substring(0,16)+'... '+amount+' sats');
+      }
+    }
+  }
+
+  // Sort by oldest first (lowest created_at)
+  qualifying.sort(function(a,b){return a.created_at-b.created_at;});
+
+  // Take up to FRONTIER_MAX_LOTS
+  frontierZappers=qualifying.slice(0,FRONTIER_MAX_LOTS);
+  console.log('[Frontier] '+frontierZappers.length+' qualifying zappers (of '+qualifying.length+' total)');
+
+  // Claim lots for qualifying zappers
+  for(var ci=0;ci<frontierZappers.length;ci++){
+    claimFrontierLot(ci,frontierZappers[ci]);
+  }
+
+  // Fetch profiles for all zappers
+  if(frontierZappers.length>0){
+    var pks=frontierZappers.map(function(z){return z.pubkey;});
+    fetchFrontierProfiles(pks);
+  }
+}
+
+function claimFrontierLot(lotIdx,zapper){
+  if(lotIdx>=frontierLotState.length)return;
+  var lot=frontierLotState[lotIdx];
+  lot.claimed=true;
+  lot.ownerPubkey=zapper.pubkey;
+
+  console.log('[Frontier] Claiming lot '+lotIdx+' for '+zapper.pubkey.substring(0,16)+'...');
+
+  // Remove the old frame building contents
+  while(lot.group.children.length>0){lot.group.remove(lot.group.children[0]);}
+
+  // Build a completed house
+  var w=lot.w,d=lot.d,h=lot.h,R=h+2;
+  var bMat=new THREE.MeshStandardMaterial({color:0x101025,roughness:0.35,metalness:0.5,emissive:0x00cccc,emissiveIntensity:0.04});
+  var bEdge=new THREE.LineBasicMaterial({color:0x00cccc,transparent:true,opacity:0.55});
+  function lotBox(bw,bh,bd,bx,by,bz){
+    var g=new THREE.BoxGeometry(bw,bh,bd);var m=new THREE.Mesh(g,bMat.clone());
+    m.position.set(bx,by,bz);
+    m.add(new THREE.LineSegments(new THREE.EdgesGeometry(g,15),bEdge.clone()));
+    lot.group.add(m);return m;
+  }
+
+  // Walls
+  lotBox(w,h,0.15, 0,h/2,-d/2);
+  lotBox(w,h,0.15, 0,h/2,d/2);
+  lotBox(0.15,h,d, -w/2,h/2,0);
+  lotBox(0.15,h,d, w/2,h/2,0);
+  // Floor
+  lotBox(w,0.1,d, 0,0.05,0);
+  // Door frame
+  lotBox(1.6,2.6,0.06, 0,1.3,-d/2-0.08);
+  // Windows
+  for(var wxi=-1;wxi<=1;wxi+=2){
+    var wn=new THREE.Mesh(new THREE.BoxGeometry(1,0.8,0.06),new THREE.MeshStandardMaterial({color:0x101025,emissive:0x00aacc,emissiveIntensity:0.1}));
+    wn.position.set(wxi*(w*0.32),h*0.6,-d/2-0.06);
+    wn.add(new THREE.LineSegments(new THREE.EdgesGeometry(wn.geometry,15),new THREE.LineBasicMaterial({color:0x00ffcc,transparent:true,opacity:0.5})));
+    lot.group.add(wn);
+  }
+  // Roof
+  var rAng=Math.atan2(R-h,w/2);var rLen=Math.sqrt((R-h)*(R-h)+(w/2)*(w/2));
+  for(var ri=0;ri<2;ri++){
+    var rg=new THREE.BoxGeometry(rLen,0.08,d+0.4);
+    var rm=new THREE.Mesh(rg,bMat.clone());
+    rm.position.set((ri===0?-1:1)*w/4,(h+R)/2,0);rm.rotation.z=(ri===0?1:-1)*rAng;
+    rm.add(new THREE.LineSegments(new THREE.EdgesGeometry(rg,15),bEdge.clone()));lot.group.add(rm);
+  }
+  // Gables
+  var gs=new THREE.Shape();gs.moveTo(-w/2,h);gs.lineTo(0,R);gs.lineTo(w/2,h);gs.closePath();
+  for(var gi=-1;gi<=1;gi+=2){
+    var gm=new THREE.Mesh(new THREE.ShapeGeometry(gs),new THREE.MeshStandardMaterial({color:0x0c0c20,emissive:0x001122,emissiveIntensity:0.06,side:THREE.DoubleSide}));
+    gm.position.z=gi*d/2;
+    gm.add(new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.ShapeGeometry(gs),1),new THREE.LineBasicMaterial({color:0x00cccc,transparent:true,opacity:0.3})));
+    lot.group.add(gm);
+  }
+  // Chimney
+  lotBox(0.5,2,0.5, w*0.25,R+0.2,d*0.2);
+  // Fireplace glow
+  var fLight=new THREE.PointLight(0xff6622,0.12,w);fLight.position.set(0,h*0.3,d/2-0.5);lot.group.add(fLight);
+
+  // Re-add hit mesh
+  var hitGeo=new THREE.BoxGeometry(w+2,R+2,d+2);
+  var hitMesh=new THREE.Mesh(hitGeo,new THREE.MeshBasicMaterial({transparent:true,opacity:0}));
+  hitMesh.position.set(0,(R+2)/2,0);hitMesh.userData={frontierIdx:lotIdx};
+  lot.group.add(hitMesh);lot.hitMesh=hitMesh;
+
+  // Label (will be updated when profile loads)
+  var flc=document.createElement('canvas');flc.width=512;flc.height=64;
+  var flctx=flc.getContext('2d');
+  flctx.fillStyle='#00ffcc';flctx.font='bold 16px Courier New';
+  flctx.fillText(zapper.pubkey.substring(0,16)+'...\'s House',10,24);
+  flctx.fillStyle='rgba(0,255,200,0.4)';flctx.font='12px Courier New';
+  flctx.fillText('\u26A1 Zapped '+zapper.amount+' sats to claim',10,48);
+  var fltex=new THREE.CanvasTexture(flc);fltex.minFilter=THREE.LinearFilter;
+  var flspr=new THREE.Sprite(new THREE.SpriteMaterial({map:fltex,transparent:true,opacity:0.75}));
+  flspr.scale.set(10,1.2,1);flspr.position.set(0,R+1.5,0);lot.group.add(flspr);
+  lot.labelSprite=flspr;lot.labelCanvas=flc;lot.labelTex=fltex;
+}
+
+function fetchFrontierProfiles(pks){
+  try{
+    var ws=new WebSocket('wss://relay.primal.net');
+    ws.onopen=function(){ws.send(JSON.stringify(["REQ","frprof",{kinds:[0],authors:pks}]));};
+    ws.onmessage=function(e){
+      try{var m=JSON.parse(e.data);
+        if(m[0]==="EVENT"&&m[2]&&m[2].kind===0){
+          var pk=m[2].pubkey;
+          try{
+            var p=JSON.parse(m[2].content);
+            profileCache[pk]={name:p.name||p.display_name||'',picture:p.picture||''};
+            if(p.picture)loadProfileImg(pk,p.picture);
+            // Update lot label with real name
+            for(var li=0;li<frontierLotState.length;li++){
+              var lot=frontierLotState[li];
+              if(lot.claimed&&lot.ownerPubkey===pk){
+                lot.ownerName=p.name||p.display_name||'';
+                var ctx=lot.labelCanvas.getContext('2d');
+                ctx.clearRect(0,0,512,64);
+                ctx.fillStyle='#00ffcc';ctx.font='bold 16px Courier New';
+                ctx.fillText((lot.ownerName||pk.substring(0,12))+'\'s House',10,24);
+                ctx.fillStyle='rgba(0,255,200,0.4)';ctx.font='12px Courier New';
+                var zapper=null;for(var zi=0;zi<frontierZappers.length;zi++){if(frontierZappers[zi].pubkey===pk)zapper=frontierZappers[zi];}
+                ctx.fillText('\u26A1 Zapped '+(zapper?zapper.amount:'1000+')+' sats to build',10,48);
+                lot.labelTex.needsUpdate=true;
+              }
+            }
+          }catch(pe){}
+        }
+        if(m[0]==="EOSE"){ws.send(JSON.stringify(["CLOSE","frprof"]));ws.close();}
+      }catch(ee){}
+    };
+  }catch(ee){}
+}
+
+// Start fetching frontier zaps after a delay (let relays connect first)
+setTimeout(fetchFrontierZaps,4000);
+
+// ── Frontier lot hover/click/zap handlers are in §29 (after §28 login/zap system) ──
 
 // ═══════════════════════════════════════════════════════════════════════════
 // §24 BUILDING ENTER/EXIT SYSTEM
@@ -4011,9 +4344,13 @@ window.addEventListener('pointermove',function(e){
 // Deep link: open directly inside a villager's building (?npub=… or ?house=…, or #npub=…)
 function deepLinkNpubRaw(){
   var raw='';
+  console.log('[DeepLink] URL: '+window.location.href);
+  console.log('[DeepLink] search: "'+window.location.search+'"');
+  console.log('[DeepLink] hash: "'+window.location.hash+'"');
   try{
     var sp=new URLSearchParams(window.location.search);
     raw=sp.get('npub')||sp.get('house')||'';
+    console.log('[DeepLink] from search params: "'+raw+'"');
     if(!raw&&location.hash){
       var h=location.hash.replace(/^#/,'');
       if(/^npub=/i.test(h))raw=h.slice(5);
@@ -4022,34 +4359,70 @@ function deepLinkNpubRaw(){
         var hp=new URLSearchParams(h);
         raw=hp.get('npub')||hp.get('house')||'';
       }
+      console.log('[DeepLink] from hash: "'+raw+'"');
     }
-  }catch(e){}
+  }catch(e){console.log('[DeepLink] parse error: '+e);}
+  if(!raw){
+    // Also try to find npub anywhere in the URL (fallback)
+    var fullUrl=window.location.href;
+    var npubMatch=fullUrl.match(/npub1[a-z0-9]{58,}/i);
+    if(npubMatch){raw=npubMatch[0];console.log('[DeepLink] regex fallback found: "'+raw+'"');}
+  }
   if(!raw)return'';
   try{raw=decodeURIComponent(raw.replace(/\+/g,' '));}catch(e2){}
   return String(raw).trim();
 }
 function findVillageBuildingByDeepLink(raw){
   if(!raw)return null;
-  var q=raw.toLowerCase();
+  var q=raw.toLowerCase().trim();
+  console.log('[DeepLink] searching for: "'+q+'" among '+village.length+' buildings');
+  // 1. Try exact 64-char hex match
   if(/^[0-9a-f]{64}$/.test(q)){
-    for(var i=0;i<village.length;i++){if(village[i].hex===q)return village[i];}
+    for(var i=0;i<village.length;i++){
+      if(village[i].hex===q){console.log('[DeepLink] hex match at index '+i);return village[i];}
+    }
+    console.log('[DeepLink] no hex match found');
     return null;
   }
+  // 2. Try bech32 decode → hex match
   var fromBech=npubToHex(q);
-  if(fromBech){
-    for(var vi=0;vi<village.length;vi++){if(village[vi].hex===fromBech)return village[vi];}
+  console.log('[DeepLink] decoded bech32 to hex: "'+fromBech+'" (len='+fromBech.length+')');
+  if(fromBech&&fromBech.length>=64){
+    // npubToHex may produce extra leading bytes — take the last 64 chars (the actual key)
+    var hexKey=fromBech.length>64?fromBech.slice(fromBech.length-64):fromBech;
+    console.log('[DeepLink] using hex key: "'+hexKey+'"');
+    for(var vi=0;vi<village.length;vi++){
+      if(village[vi].hex===hexKey){console.log('[DeepLink] bech32→hex match at index '+vi);return village[vi];}
+    }
   }
+  // 3. Try direct npub string match against VILLAGE_NPUBS
   for(var vj=0;vj<village.length;vj++){
     var nd=village[vj].npubData;
-    if(nd&&nd.npub&&String(nd.npub).toLowerCase()===q)return village[vj];
+    if(nd&&nd.npub&&String(nd.npub).toLowerCase()===q){console.log('[DeepLink] npub string match at index '+vj);return village[vj];}
+  }
+  // 4. Try name match (case-insensitive)
+  for(var vk=0;vk<village.length;vk++){
+    var nd2=village[vk].npubData;
+    if(nd2&&nd2.name&&nd2.name.toLowerCase()===q){console.log('[DeepLink] name match at index '+vk);return village[vk];}
+  }
+  // 5. Debug: log all village hex values for comparison
+  console.log('[DeepLink] no match found. Village hex values:');
+  for(var vd=0;vd<Math.min(village.length,5);vd++){
+    console.log('  ['+vd+'] hex="'+village[vd].hex+'" npub="'+(village[vd].npubData?village[vd].npubData.npub.substring(0,30)+'...':'')+'"');
   }
   return null;
 }
 function tryDeepLinkEnterBuilding(){
   var key=deepLinkNpubRaw();
-  if(!key)return;
+  if(!key){console.log('[DeepLink] no deep link key found in URL');return;}
+  console.log('[DeepLink] raw key from URL: "'+key+'"');
   var b=findVillageBuildingByDeepLink(key);
-  if(b)enterBuilding(b);
+  if(b){
+    console.log('[DeepLink] found building, entering...');
+    enterBuilding(b);
+  }else{
+    console.log('[DeepLink] building not found for key: '+key);
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -4407,8 +4780,9 @@ function anim(){
   }
   renderer.render(scene,camera);
 }
-tryDeepLinkEnterBuilding();
 anim();
+// Deep link: delay slightly so render loop is running and camera transition works
+setTimeout(function(){tryDeepLinkEnterBuilding();},500);
 window.addEventListener('resize',function(){var w=window.innerWidth||800,h=window.innerHeight||600;camera.aspect=w/h;camera.updateProjectionMatrix();renderer.setSize(w,h);});
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -4898,6 +5272,145 @@ zapTreeClose.addEventListener('click',function(){
   if(zapInvoiceArea.classList.contains('v')&&zapSendBtn.textContent.indexOf('ZAPPED')<0){
     onTreeZapSuccess(selectedZapAmt||21);
   }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// §29 FRONTIER LOT INTERACTIONS — hover, click, zap prompt
+//     (Must come after §28 so zapSendBtn, loginModal, nostrUser etc. exist)
+// ═══════════════════════════════════════════════════════════════════════════
+var frontierRc=new THREE.Raycaster();
+var frontierHovered=-1;
+
+window.addEventListener('pointermove',function(e){
+  if(insideHouse)return;
+  var hitMeshes=frontierLotState.map(function(l){return l.hitMesh;});
+  var mx=(e.clientX/(window.innerWidth||1))*2-1;
+  var my=-(e.clientY/(window.innerHeight||1))*2+1;
+  frontierRc.setFromCamera(new THREE.Vector2(mx,my),camera);
+  var hits=frontierRc.intersectObjects(hitMeshes);
+  if(hits.length>0){
+    var fi=hits[0].object.userData.frontierIdx;
+    if(fi!==undefined&&fi!==frontierHovered){
+      frontierHovered=fi;
+      var lot=frontierLotState[fi];
+      tooltipLocked='frontier';
+      renderer.domElement.style.cursor='pointer';
+      if(lot.claimed){
+        ttC.textContent='\uD83C\uDFE0 Frontier House';ttC.style.color='#00ffcc';
+        ttN.textContent=(lot.ownerName||lot.ownerPubkey.substring(0,16)+'...')+'\'s House';
+        ttD.textContent='Built with a \u26A1 '+(frontierZappers[fi]?frontierZappers[fi].amount:'1000+')+' sat zap';
+        tt.querySelector('.hint').textContent='';
+      }else{
+        ttC.textContent='\u26A1 Frontier Lot \u2014 FOR SALE';ttC.style.color='#ff8844';
+        ttN.textContent='Lot #'+(fi+1)+' \u2014 Claim This Land!';
+        if(nostrUser&&nostrUser.pubkey){
+          ttD.textContent='Click to zap 1000+ sats and build your house here!';
+          tt.querySelector('.hint').textContent='[ CLICK TO CLAIM ]';
+        }else{
+          ttD.textContent='Login with Nostr, then zap 1000+ sats to build your house here';
+          tt.querySelector('.hint').textContent='[ LOGIN FIRST ]';
+        }
+      }
+      tt.style.opacity='1';
+    }
+    tt.style.left=Math.min(e.clientX+15,(window.innerWidth||800)-380)+'px';
+    tt.style.top=Math.min(e.clientY+15,(window.innerHeight||600)-120)+'px';
+  }else if(frontierHovered>=0){
+    frontierHovered=-1;
+    if(tooltipLocked==='frontier'){tooltipLocked=false;tt.style.opacity='0';}
+  }
+});
+
+// Click unclaimed frontier lot: open zap prompt
+window.addEventListener('click',function(e){
+  if(e.target!==renderer.domElement||modalOpen||insideHouse||drMv)return;
+  var hitMeshes=frontierLotState.map(function(l){return l.hitMesh;});
+  var mx=(e.clientX/(window.innerWidth||1))*2-1;
+  var my=-(e.clientY/(window.innerHeight||1))*2+1;
+  frontierRc.setFromCamera(new THREE.Vector2(mx,my),camera);
+  var hits=frontierRc.intersectObjects(hitMeshes);
+  if(hits.length>0){
+    var fi=hits[0].object.userData.frontierIdx;
+    if(fi===undefined)return;
+    var lot=frontierLotState[fi];
+    if(lot.claimed){
+      // Show info about the owner
+      var pk=lot.ownerPubkey;var prof=profileCache[pk];var pImg=profileImgs[pk];
+      var profHtml='';
+      if(pImg&&pImg!=='loading'&&pImg!=='failed')profHtml+='<img src="'+pImg.src+'" alt="">';
+      else profHtml+='<div class="np-initials">'+(pk?pk.substring(0,2).toUpperCase():'??')+'</div>';
+      profHtml+='<div class="np-info"><div class="np-name">'+(lot.ownerName||'Frontier Settler')+'</div>';
+      profHtml+='<div class="np-pk">'+pk.substring(0,32)+'...</div></div>';
+      noteProfile.innerHTML=profHtml;
+      noteContent.textContent='\u26A1 This house was built by zapping 1000+ sats to the frontier note.\n\n'+(lot.ownerName||pk.substring(0,16)+'...')+' claimed Lot #'+(fi+1)+' in the Nostr Frontier!';
+      noteMeta.innerHTML='<span style="color:rgba(0,255,200,.5)">\uD83C\uDFE0 Frontier House \u2022 Lot #'+(fi+1)+'</span>';
+      noteModal.classList.add('open');modalOpen=true;
+    }else{
+      // Unclaimed — prompt to zap
+      if(nostrUser&&nostrUser.pubkey&&nostrUser.signer){
+        openFrontierZapPrompt(fi);
+      }else{
+        loginModal.classList.add('open');
+        loginStatus.textContent='Login to claim Frontier Lot #'+(fi+1)+'! Zap 1000+ sats to build your house.';
+      }
+    }
+  }
+});
+
+function openFrontierZapPrompt(lotIdx){
+  var modal=document.getElementById('zap-tree-modal');
+  var title=modal.querySelector('h2');
+  var sub=modal.querySelector('.zt-sub');
+
+  title.innerHTML='\u26A1 Claim Frontier Lot #'+(lotIdx+1);
+  sub.textContent='Zap the frontier note with 1000+ sats to build your house on this lot! Your house will appear once the zap is confirmed.';
+
+  selectedZapAmt=1000;
+  var amtBtns=document.querySelectorAll('.zap-amt-btn');
+  for(var i=0;i<amtBtns.length;i++)amtBtns[i].classList.remove('selected');
+  document.getElementById('zap-custom-amt').value='1000';
+
+  zapSendBtn.disabled=false;
+  zapSendBtn.textContent='\u26A1 ZAP TO CLAIM LOT';
+  zapTreeStatus.textContent='Minimum 1000 sats to claim this lot';
+  zapInvoiceArea.classList.remove('v');
+
+  modal.setAttribute('data-frontier-lot',String(lotIdx));
+  modal.classList.add('open');
+}
+
+// Override zap send to handle frontier lots
+zapSendBtn.addEventListener('click',function(e){
+  var modal=document.getElementById('zap-tree-modal');
+  var lotAttr=modal.getAttribute('data-frontier-lot');
+  if(lotAttr!==null&&lotAttr!==''){
+    e.stopImmediatePropagation();
+    var lotIdx=parseInt(lotAttr);
+    var amt=selectedZapAmt||1000;
+    if(amt<FRONTIER_MIN_SATS){
+      zapTreeStatus.textContent='Minimum '+FRONTIER_MIN_SATS+' sats required to claim a lot!';
+      return;
+    }
+    modal.removeAttribute('data-frontier-lot');
+    zapSendBtn.disabled=true;
+    zapSendBtn.textContent='Connecting...';
+    if(zapTargetCallback){
+      doZap(amt,document.getElementById('zap-comment').value.trim()||'Claiming Frontier Lot #'+(lotIdx+1)+'!');
+    }else{
+      fetchZapEndpoint(function(ok){
+        if(ok)doZap(amt,document.getElementById('zap-comment').value.trim()||'Claiming Frontier Lot #'+(lotIdx+1)+'!');
+        else{zapSendBtn.disabled=false;zapSendBtn.textContent='\u26A1 ZAP TO CLAIM LOT';}
+      });
+    }
+  }
+});
+
+// When zap tree modal closes, reset frontier mode
+zapTreeClose.addEventListener('click',function(){
+  var modal=document.getElementById('zap-tree-modal');
+  modal.removeAttribute('data-frontier-lot');
+  modal.querySelector('h2').innerHTML='\u26A9 Zap the Village Tree';
+  modal.querySelector('.zt-sub').textContent='Send sats to grow the community tree! Zaps go to the village treasury.';
 });
 
 </script>

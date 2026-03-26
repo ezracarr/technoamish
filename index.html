@@ -2070,6 +2070,8 @@ function fetchWot(){
 // ─── 9. KIND GARDEN ──────────────────────────────────────────
 var gardenGroup=new THREE.Group();gardenGroup.position.set(-9,0,32);gardenGroup.visible=true;scene.add(gardenGroup);
 var gardenBuilt=false;var gmNotes=[];var gmPlants=[];var gmFetched=false;
+var GM_PLANT_COUNT=21; // must match number of plants in garden
+var gmNoteIds={}; // dedup by event id
 var plantTypes=['sunflower','corn','tulip','carrot','tomato','daisy','wheat'];
 function onToggleGarden(){
   gardenGroup.visible=FT.gdn;
