@@ -2059,6 +2059,8 @@ function fetchWot(){
 // ─── 9. KIND GARDEN ──────────────────────────────────────────
 var gardenGroup=new THREE.Group();gardenGroup.position.set(-9,0,32);gardenGroup.visible=true;scene.add(gardenGroup);
 var gardenBuilt=false;var gmNotes=[];var gmPlants=[];var gmFetched=false;
+var GM_PLANT_COUNT=21; // must match number of plants in garden
+var gmNoteIds={}; // dedup by event id
 var plantTypes=['sunflower','corn','tulip','carrot','tomato','daisy','wheat'];
 function onToggleGarden(){
   gardenGroup.visible=FT.gdn;
@@ -2069,14 +2071,34 @@ setTimeout(function(){buildGMGarden();},100);
 setTimeout(function(){if(!gmFetched){gmFetched=true;fetchGMNotes();}},2000);
 // Fallback: if notes haven't arrived after 10s, use main relay notes
 setTimeout(function(){
-  if(gmNotes.length===0&&nostrNotes.length>0){
-    for(var i=0;i<nostrNotes.length&&gmNotes.length<21;i++){
+  if(gmNotes.length<GM_PLANT_COUNT&&nostrNotes.length>0){
+    for(var i=0;i<nostrNotes.length&&gmNotes.length<GM_PLANT_COUNT;i++){
       var c=(nostrNotes[i].content||'').toLowerCase().trim();
-      if(c.length>5&&c.length<300)gmNotes.push(nostrNotes[i]);
+      if(c.length>5&&c.length<300&&!gmNoteIds[nostrNotes[i].id]){
+        gmNoteIds[nostrNotes[i].id]=true;
+        gmNotes.push(nostrNotes[i]);
+      }
     }
     if(gmNotes.length>0)updateGardenNotes();
   }
 },10000);
+// Periodic retry: every 15s, scan main feed for new unique GM notes until all plants are filled
+var gmRetryInterval=setInterval(function(){
+  if(gmNotes.length>=GM_PLANT_COUNT){clearInterval(gmRetryInterval);return;}
+  var added=0;
+  for(var i=0;i<nostrNotes.length&&gmNotes.length<GM_PLANT_COUNT;i++){
+    var c=(nostrNotes[i].content||'').toLowerCase().trim();
+    if(c.length>5&&c.length<300&&!gmNoteIds[nostrNotes[i].id]){
+      gmNoteIds[nostrNotes[i].id]=true;
+      gmNotes.push(nostrNotes[i]);added++;
+    }
+  }
+  if(added>0){
+    console.log('[GM Garden] Retry found '+added+' new GM notes (total: '+gmNotes.length+'/'+GM_PLANT_COUNT+')');
+    updateGardenNotes();
+  }
+  if(gmNotes.length>=GM_PLANT_COUNT)clearInterval(gmRetryInterval);
+},15000);
 
 function fetchGMNotes(){
   try{
@@ -2086,7 +2108,8 @@ function fetchGMNotes(){
       try{var m=JSON.parse(e.data);
         if(m[0]==="EVENT"&&m[2]&&m[2].content){
           var c=m[2].content.toLowerCase().trim();
-          if(c.length<200&&(/^gm\b/i.test(c)||/^good\s*morning/i.test(c))){
+          if(c.length<200&&(/^gm\b/i.test(c)||/^good\s*morning/i.test(c))&&!gmNoteIds[m[2].id]){
+            gmNoteIds[m[2].id]=true;
             gmNotes.push(m[2]);
             if(!profileCache[m[2].pubkey]){
               try{ws.send(JSON.stringify(["REQ","gp"+gmNotes.length,{kinds:[0],authors:[m[2].pubkey],limit:1}]));}catch(ee){}
@@ -2104,9 +2127,12 @@ function fetchGMNotes(){
       }catch(ee){}
     };
     ws.onerror=function(){
-      for(var i=0;i<nostrNotes.length&&gmNotes.length<21;i++){
+      for(var i=0;i<nostrNotes.length&&gmNotes.length<GM_PLANT_COUNT;i++){
         var c=nostrNotes[i].content.toLowerCase().trim();
-        if(c.length<200&&(/^gm\b/i.test(c)||/^good\s*morning/i.test(c)))gmNotes.push(nostrNotes[i]);
+        if(c.length<200&&(/^gm\b/i.test(c)||/^good\s*morning/i.test(c))&&!gmNoteIds[nostrNotes[i].id]){
+          gmNoteIds[nostrNotes[i].id]=true;
+          gmNotes.push(nostrNotes[i]);
+        }
       }
       updateGardenNotes();
     };
@@ -2114,12 +2140,12 @@ function fetchGMNotes(){
 }
 
 function updateGardenNotes(){
-  // Assign notes to already-built plants and update name tags
+  // Assign unique notes to already-built plants — never reuse the same note
   for(var i=0;i<gmPlants.length;i++){
-    if(gmNotes.length>0){
-      var n=gmNotes[i%gmNotes.length];
+    if(i<gmNotes.length){
+      var n=gmNotes[i];
       gmPlants[i].note=n;
-      gmPlants[i].hitMesh.userData.gmNote=n;
+      try{if(gmPlants[i].hitBox&&gmPlants[i].hitBox.userData)gmPlants[i].hitBox.userData.gmNote=n;}catch(e){}
       // Update name tag
       var prof=profileCache[n.pubkey];
       var nameStr=prof&&prof.name?prof.name:'GM #'+(i+1);
@@ -2194,7 +2220,7 @@ function buildGMGarden(){
     var col=pi%cols,row=Math.floor(pi/cols);
     var px=2+col*(GW-4)/(cols-1);
     var pz=2+row*4+1;
-    var note=gmNotes.length>0?gmNotes[pi%gmNotes.length]:null;
+    var note=(pi<gmNotes.length)?gmNotes[pi]:null;
     var pType=plantTypes[pi%plantTypes.length];
     var pColor=plantColors[pi%plantColors.length];
     var plantG=new THREE.Group();plantG.position.set(px,0,pz);
@@ -2340,7 +2366,6 @@ window.addEventListener('pointermove',function(e){
       gmHoveredPlant=pi;
       tooltipLocked="garden";
       var n=gmPlants[pi]?gmPlants[pi].note:null;
-      if(!n&&gmNotes.length>0)n=gmNotes[pi%gmNotes.length];
       if(n){
         var pk=n.pubkey||'';var prof=profileCache[pk];
         ttC.textContent='\uD83C\uDF31 GM Garden \u2022 '+plantTypes[pi%plantTypes.length];
@@ -2353,8 +2378,8 @@ window.addEventListener('pointermove',function(e){
       }else{
         ttC.textContent='\uD83C\uDF31 GM Garden \u2022 '+plantTypes[pi%plantTypes.length];
         ttC.style.color='#00ff88';
-        ttN.textContent='\u231B Loading GM notes...';
-        ttD.textContent='Notes are being fetched from relay';
+        ttN.textContent='\u231B Waiting for a unique GM note...';
+        ttD.textContent='This plant is still sprouting — searching for more notes';
         tt.querySelector('.hint').textContent='';tt.style.opacity='1';
       }
     }
@@ -2376,7 +2401,6 @@ window.addEventListener('click',function(e){
   if(hits.length>0){
     var pi=hits[0].object.userData.plantIdx;
     var n=gmPlants[pi]?gmPlants[pi].note:null;
-    if(!n&&gmNotes.length>0)n=gmNotes[pi%gmNotes.length];
     if(n){
       var pk=n.pubkey||'';var prof=profileCache[pk];var pImg=profileImgs[pk];
       var profHtml='';

@@ -2080,15 +2080,34 @@ setTimeout(function(){buildGMGarden();},100);
 setTimeout(function(){if(!gmFetched){gmFetched=true;fetchGMNotes();}},2000);
 // Fallback: if notes haven't arrived after 12s, filter main feed for actual GM notes
 setTimeout(function(){
-  if(gmNotes.length===0&&nostrNotes.length>0){
+  if(gmNotes.length<GM_PLANT_COUNT&&nostrNotes.length>0){
     console.log('[GM Garden] 12s fallback — filtering main feed for GM notes');
-    for(var i=0;i<nostrNotes.length&&gmNotes.length<21;i++){
-      if(isValidGMNote(nostrNotes[i]))gmNotes.push(nostrNotes[i]);
+    for(var i=0;i<nostrNotes.length&&gmNotes.length<GM_PLANT_COUNT;i++){
+      if(isValidGMNote(nostrNotes[i])&&!gmNoteIds[nostrNotes[i].id]){
+        gmNoteIds[nostrNotes[i].id]=true;
+        gmNotes.push(nostrNotes[i]);
+      }
     }
-    console.log('[GM Garden] Found '+gmNotes.length+' GM notes in main feed');
+    console.log('[GM Garden] Found '+gmNotes.length+' unique GM notes in main feed');
     if(gmNotes.length>0)updateGardenNotes();
   }
 },12000);
+// Periodic retry: every 15s, scan main feed for new unique GM notes until all plants are filled
+var gmRetryInterval=setInterval(function(){
+  if(gmNotes.length>=GM_PLANT_COUNT){clearInterval(gmRetryInterval);return;}
+  var added=0;
+  for(var i=0;i<nostrNotes.length&&gmNotes.length<GM_PLANT_COUNT;i++){
+    if(isValidGMNote(nostrNotes[i])&&!gmNoteIds[nostrNotes[i].id]){
+      gmNoteIds[nostrNotes[i].id]=true;
+      gmNotes.push(nostrNotes[i]);added++;
+    }
+  }
+  if(added>0){
+    console.log('[GM Garden] Retry found '+added+' new GM notes (total: '+gmNotes.length+'/'+GM_PLANT_COUNT+')');
+    updateGardenNotes();
+  }
+  if(gmNotes.length>=GM_PLANT_COUNT)clearInterval(gmRetryInterval);
+},15000);
 
 // GM note content validation — must actually contain "gm" or "good morning"
 function isValidGMNote(note){
@@ -2100,36 +2119,44 @@ function isValidGMNote(note){
   return false;
 }
 
+var GM_PLANT_COUNT=21; // must match number of plants in garden
+var gmNoteIds={}; // dedup by event id
+
 function fetchGMNotes(){
   // Strategy: use Primal caching relay with NIP-50 search for "gm" notes
-  // Then strictly validate each note's content before including
+  // Need at least 21 unique GM notes (one per plant), request more to allow for filtering
   var relays=['wss://relay.primal.net','wss://relay.nostr.band','wss://relay.damus.io'];
   var tried=0;
   function tryRelay(){
     if(tried>=relays.length){
-      // All relays failed — fall back to filtering main feed
-      console.log('[GM Garden] All relays failed, filtering main feed');
-      for(var i=0;i<nostrNotes.length&&gmNotes.length<21;i++){
-        if(isValidGMNote(nostrNotes[i]))gmNotes.push(nostrNotes[i]);
+      // All relays tried — fall back to filtering main feed for any remaining
+      console.log('[GM Garden] All relays tried, have '+gmNotes.length+'/'+GM_PLANT_COUNT+' notes, checking main feed');
+      for(var i=0;i<nostrNotes.length&&gmNotes.length<GM_PLANT_COUNT;i++){
+        if(isValidGMNote(nostrNotes[i])&&!gmNoteIds[nostrNotes[i].id]){
+          gmNoteIds[nostrNotes[i].id]=true;
+          gmNotes.push(nostrNotes[i]);
+        }
       }
+      console.log('[GM Garden] Final count: '+gmNotes.length+' unique GM notes');
       if(gmNotes.length>0)updateGardenNotes();
       return;
     }
     var url=relays[tried++];
-    console.log('[GM Garden] Trying '+url+'...');
+    console.log('[GM Garden] Trying '+url+' (have '+gmNotes.length+'/'+GM_PLANT_COUNT+')...');
     try{
       var ws=new WebSocket(url);
       var opened=false;var gotEose=false;
       ws.onopen=function(){
         opened=true;
-        // Use NIP-50 search if supported (Primal and nostr.band support it)
-        ws.send(JSON.stringify(["REQ","gm",{kinds:[1],search:"gm good morning",limit:80}]));
+        // Request a large batch — many will be filtered out
+        ws.send(JSON.stringify(["REQ","gm",{kinds:[1],search:"gm good morning",limit:200}]));
       };
       ws.onmessage=function(e){
         try{var m=JSON.parse(e.data);
           if(m[0]==="EVENT"&&m[2]&&m[2].content){
-            // Strictly validate — only accept notes that actually say "gm" or "good morning"
-            if(isValidGMNote(m[2])){
+            // Strictly validate and deduplicate by event id
+            if(isValidGMNote(m[2])&&!gmNoteIds[m[2].id]){
+              gmNoteIds[m[2].id]=true;
               gmNotes.push(m[2]);
               if(!profileCache[m[2].pubkey]){
                 try{ws.send(JSON.stringify(["REQ","gp"+gmNotes.length,{kinds:[0],authors:[m[2].pubkey],limit:1}]));}catch(ee){}
@@ -2143,12 +2170,12 @@ function fetchGMNotes(){
           if(m[0]==="EOSE"&&m[1]==="gm"){
             gotEose=true;
             ws.send(JSON.stringify(["CLOSE","gm"]));
-            console.log('[GM Garden] Got '+gmNotes.length+' valid GM notes from '+url);
-            if(gmNotes.length>=5){
-              // Good enough — use these
+            console.log('[GM Garden] Got '+gmNotes.length+' valid unique GM notes from '+url);
+            if(gmNotes.length>=GM_PLANT_COUNT){
+              // We have enough for all 21 plants
               setTimeout(function(){try{ws.close();}catch(ee){}updateGardenNotes();},1500);
             }else{
-              // Not enough — try next relay
+              // Need more — try next relay (notes accumulate across relays)
               try{ws.close();}catch(ee){}
               tryRelay();
             }
@@ -2159,25 +2186,25 @@ function fetchGMNotes(){
         console.log('[GM Garden] '+url+' failed');
         if(!opened)tryRelay();
       };
-      // Timeout: if no response in 5s, try next relay
+      // Timeout: if no response in 6s, move on
       setTimeout(function(){
         if(!gotEose){
-          console.log('[GM Garden] '+url+' timed out');
+          console.log('[GM Garden] '+url+' timed out (have '+gmNotes.length+')');
           try{ws.close();}catch(ee){}
-          if(gmNotes.length>=5){updateGardenNotes();}
+          if(gmNotes.length>=GM_PLANT_COUNT){updateGardenNotes();}
           else{tryRelay();}
         }
-      },5000);
+      },6000);
     }catch(ee){tryRelay();}
   }
   tryRelay();
 }
 
 function updateGardenNotes(){
-  // Assign notes to already-built plants and update name tags
+  // Assign unique notes to already-built plants — never reuse the same note
   for(var i=0;i<gmPlants.length;i++){
-    if(gmNotes.length>0){
-      var n=gmNotes[i%gmNotes.length];
+    if(i<gmNotes.length){
+      var n=gmNotes[i];
       var gp=gmPlants[i];if(!gp)continue;
       gp.note=n;
       try{if(gp.hitBox&&gp.hitBox.userData)gp.hitBox.userData.gmNote=n;}catch(e){}
@@ -2255,7 +2282,7 @@ function buildGMGarden(){
     var col=pi%cols,row=Math.floor(pi/cols);
     var px=2+col*(GW-4)/(cols-1);
     var pz=2+row*4+1;
-    var note=gmNotes.length>0?gmNotes[pi%gmNotes.length]:null;
+    var note=(pi<gmNotes.length)?gmNotes[pi]:null;
     var pType=plantTypes[pi%plantTypes.length];
     var pColor=plantColors[pi%plantColors.length];
     var plantG=new THREE.Group();plantG.position.set(px,0,pz);
@@ -2401,7 +2428,6 @@ window.addEventListener('pointermove',function(e){
       gmHoveredPlant=pi;
       tooltipLocked="garden";
       var n=gmPlants[pi]?gmPlants[pi].note:null;
-      if(!n&&gmNotes.length>0)n=gmNotes[pi%gmNotes.length];
       if(n){
         var pk=n.pubkey||'';var prof=profileCache[pk];
         ttC.textContent='\uD83C\uDF31 GM Garden \u2022 '+plantTypes[pi%plantTypes.length];
@@ -2414,8 +2440,8 @@ window.addEventListener('pointermove',function(e){
       }else{
         ttC.textContent='\uD83C\uDF31 GM Garden \u2022 '+plantTypes[pi%plantTypes.length];
         ttC.style.color='#00ff88';
-        ttN.textContent='\u231B Loading GM notes...';
-        ttD.textContent='Notes are being fetched from relay';
+        ttN.textContent='\u231B Waiting for a unique GM note...';
+        ttD.textContent='This plant is still sprouting — searching for more notes';
         tt.querySelector('.hint').textContent='';tt.style.opacity='1';
       }
     }
@@ -2437,7 +2463,6 @@ window.addEventListener('click',function(e){
   if(hits.length>0){
     var pi=hits[0].object.userData.plantIdx;
     var n=gmPlants[pi]?gmPlants[pi].note:null;
-    if(!n&&gmNotes.length>0)n=gmNotes[pi%gmNotes.length];
     if(n){
       var pk=n.pubkey||'';var prof=profileCache[pk];var pImg=profileImgs[pk];
       var profHtml='';
