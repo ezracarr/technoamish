@@ -231,6 +231,32 @@ canvas{display:block;width:100%!important;height:100%!important;position:relativ
   font-size:10px;color:rgba(255,170,0,.5);letter-spacing:2px;text-transform:uppercase;
   font-family:'Courier New',monospace;pointer-events:none;opacity:0;transition:opacity .3s}
 #tree-zap-hint.v{opacity:1}
+
+/* ── Community Wall Post Modal ── */
+#cw-post-modal{position:fixed;inset:0;z-index:300;display:none;align-items:center;justify-content:center;background:rgba(0,4,8,.88)}
+#cw-post-modal.open{display:flex}
+#cw-post-inner{max-width:480px;width:90%;background:rgba(8,12,24,.96);border:1px solid rgba(0,255,200,.5);
+  border-radius:6px;padding:28px 32px;position:relative;box-shadow:0 0 50px rgba(0,255,200,.12)}
+#cw-post-inner h2{font-size:16px;letter-spacing:3px;color:#00ffcc;margin:0 0 6px;text-transform:uppercase;font-family:'Courier New',monospace}
+#cw-post-inner .cw-sub{font-size:11px;color:rgba(0,255,200,.4);margin:0 0 20px;line-height:1.6;font-family:'Courier New',monospace}
+#cw-post-close{position:absolute;top:12px;right:14px;background:none;border:1px solid rgba(0,255,200,.3);
+  color:#00ffcc;font-size:16px;cursor:pointer;width:28px;height:28px;display:flex;align-items:center;justify-content:center;
+  font-family:monospace;transition:all .15s}
+#cw-post-close:hover{border-color:#00ffcc;background:rgba(0,255,200,.1)}
+#cw-post-textarea{width:100%;background:rgba(4,8,16,.9);border:1px solid rgba(0,255,200,.3);color:rgba(200,255,240,.8);
+  padding:14px 16px;font-family:'Courier New',monospace;font-size:13px;outline:none;border-radius:3px;
+  resize:none;height:120px;line-height:1.6;letter-spacing:0.5px}
+#cw-post-textarea::placeholder{color:rgba(0,255,200,.2)}
+#cw-post-textarea:focus{border-color:rgba(0,255,200,.6);box-shadow:0 0 12px rgba(0,255,200,.08)}
+#cw-post-charcount{font-size:9px;color:rgba(0,255,200,.3);text-align:right;margin-top:4px;letter-spacing:1px;font-family:'Courier New',monospace}
+#cw-post-btn{width:100%;margin-top:14px;background:rgba(0,255,200,.12);border:1px solid rgba(0,255,200,.6);color:#00ffcc;padding:12px;
+  font-family:'Courier New',monospace;font-size:13px;letter-spacing:3px;text-transform:uppercase;
+  cursor:pointer;border-radius:4px;transition:all .2s;font-weight:bold}
+#cw-post-btn:hover{background:rgba(0,255,200,.22);border-color:#00ffcc;box-shadow:0 0 15px rgba(0,255,200,.15)}
+#cw-post-btn:disabled{opacity:0.4;cursor:not-allowed}
+#cw-post-status{font-size:10px;color:rgba(255,170,0,.5);margin-top:12px;letter-spacing:1px;font-family:'Courier New',monospace;min-height:14px;text-align:center}
+#cw-post-login-hint{font-size:10px;color:rgba(0,255,200,.35);letter-spacing:1px;font-family:'Courier New',monospace;text-align:center;margin-top:12px;display:none}
+#cw-post-login-hint.v{display:block}
 </style>
 </head>
 <body>
@@ -327,6 +353,20 @@ canvas{display:block;width:100%!important;height:100%!important;position:relativ
       <button id="nsec-login-btn" style="background:rgba(255,100,0,.1);border:1px solid rgba(255,100,0,.5);color:#f80;padding:8px 14px;font-family:'Courier New',monospace;font-size:11px;cursor:pointer;border-radius:3px;letter-spacing:1px;white-space:nowrap">Login</button>
     </div>
     <div id="login-status"></div>
+  </div>
+</div>
+
+<!-- Community Wall Post Modal -->
+<div id="cw-post-modal">
+  <div id="cw-post-inner">
+    <button id="cw-post-close">X</button>
+    <h2>&#x270E; Write on the Wall</h2>
+    <p class="cw-sub" id="cw-post-house-name">Leave a note on this community wall</p>
+    <textarea id="cw-post-textarea" placeholder="Write your note here..." maxlength="500"></textarea>
+    <div id="cw-post-charcount">0 / 500</div>
+    <button id="cw-post-btn" disabled>Post to Wall</button>
+    <div id="cw-post-status"></div>
+    <div id="cw-post-login-hint">&#128273; Log in with Nostr to post on the community wall</div>
   </div>
 </div>
 
@@ -2886,6 +2926,20 @@ var VILLAGE_NPUBS=[
   {npub:'npub12rv5lskctqxxs2c8rf2zlzc7xx3qpvzs3w4etgemauy9thegr43sf485vg',name:'Calle'},
   {npub:'npub1x3w5ty7cdrcznw4nn3ylexc35as3ky953fj7s9gns8f3zklajhdsl2mh3r',name:'Royster'},
 ];
+
+// ═══════════════════════════════════════════════════════════════
+// Community Wall Root Notes — maps village index → root note event ID
+// Each root note was published by the project npub. Users reply to
+// these notes and those replies populate the community wall inside
+// each building. Only Royster's house (index 27) is wired up so far.
+// As more root notes are published, add their event IDs here.
+// ═══════════════════════════════════════════════════════════════
+var COMMUNITY_WALL_NOTES={
+  27:'1bcaa508383421ffb43e99bbf56915b72d95014971272093f04daa223e7622a4' // Royster
+};
+var CW_PROJECT_PUBKEY='bbf94c83c69f7334ffdaed550a9729b94347d22b050a213336a818c2620d6243';
+var CW_RELAY_LIST=['wss://relay.primal.net','wss://relay.damus.io','wss://nos.lol','wss://relay.nostr.band'];
+
 // Village center at (120,0). Main street runs E-W, cross streets N-S.
 // Entrances: clear gap at west (road from barn), north, south, east
 var VILLAGE_CX=120,VILLAGE_CZ=0;
@@ -3157,6 +3211,7 @@ function createBuilding(idx){
 
   var bldg={grp:grp,wx:wx,wz:wz,ry:layout.ry||0,W:W,D:D,H:H,R:R,hex:hex,npubData:npubData,
     wallMeshes:wallMeshes,clickMeshes:clickMeshes,notes:notes,fetched:fetched,
+    communityNotes:[],communityFetched:false,villageIdx:idx,
     lctx:lctx,ltex:ltex,lspr:lspr,fireParticles:fireSpr,smokeParticles:[],fireLight:fLight};
 
   // Interior wall note canvases (created on first fetch)
@@ -3173,7 +3228,7 @@ function createBuilding(idx){
     for(var wi=0;wi<4;wi++){
       var wc=document.createElement('canvas');wc.width=1024;wc.height=768;
       if(wi===3){
-        drawNoteWall(wc);
+        drawCommunityWall(wc,bldg);
       }else{
         drawVillageWall(wc,bldg.notes,wi*WALL_COLS*WALL_ROWS,colors[wi]);
       }
@@ -3191,10 +3246,16 @@ function createBuilding(idx){
       for(var si=0;si<bldg.wallMeshes.length;si++)bldg.wallMeshes[si].visible=true;
     }
   };
+  bldg.updateCommunityWall=function(){
+    if(bldg.wallCanvases.length>3){
+      drawCommunityWall(bldg.wallCanvases[3],bldg);
+      bldg.wallTextures[3].needsUpdate=true;
+    }
+  };
   bldg.updateWallTextures=function(){
     var colors=['#00ffcc','#ff8844','#00ccff','#ff44aa'];
     for(var wi=0;wi<bldg.wallCanvases.length;wi++){
-      if(wi===3)continue; // leave the community wall alone
+      if(wi===3){bldg.updateCommunityWall();continue;}
       drawVillageWall(bldg.wallCanvases[wi],bldg.notes,wi*WALL_COLS*WALL_ROWS,colors[wi]);
       bldg.wallTextures[wi].needsUpdate=true;
     }
@@ -3207,6 +3268,8 @@ function createBuilding(idx){
     if(bldg.fetched||!bldg.hex)return;bldg.fetched=true;
     // Build walls immediately (with empty notes for now, plus community wall)
     bldg.buildWalls();
+    // Also fetch community wall notes if this building has a root note
+    bldg.fetchCommunityWall();
     try{var ws=new WebSocket('wss://relay.primal.net');
       ws.onopen=function(){
         ws.send(JSON.stringify(["REQ","v"+idx,{kinds:[1],authors:[bldg.hex],limit:60}]));
@@ -3237,39 +3300,206 @@ function createBuilding(idx){
       };
     }catch(ee){bldg.fetched=false;}
   };
+  // ── Community Wall: fetch replies to the root note for this building ──
+  bldg.fetchCommunityWall=function(){
+    var rootNoteId=COMMUNITY_WALL_NOTES[bldg.villageIdx];
+    if(!rootNoteId||bldg.communityFetched)return;
+    bldg.communityFetched=true;
+    var seenIds={};
+    var profilesNeeded={};
+    var relayIdx=0;
+    function tryRelay(){
+      if(relayIdx>=CW_RELAY_LIST.length){
+        // Done trying relays — sort and render
+        bldg.communityNotes.sort(function(a,b){return(b.created_at||0)-(a.created_at||0);});
+        bldg.updateCommunityWall();
+        return;
+      }
+      var url=CW_RELAY_LIST[relayIdx];relayIdx++;
+      try{
+        var ws=new WebSocket(url);
+        var gotEose=false;
+        var timeout=setTimeout(function(){try{ws.close();}catch(e){}if(!gotEose)tryRelay();},8000);
+        ws.onopen=function(){
+          // Fetch kind:1 replies that tag the root note
+          ws.send(JSON.stringify(["REQ","cw"+bldg.villageIdx,{kinds:[1],"#e":[rootNoteId],limit:100}]));
+        };
+        ws.onmessage=function(e){
+          try{var m=JSON.parse(e.data);
+            if(m[0]==="EVENT"&&m[1]==="cw"+bldg.villageIdx&&m[2]){
+              var ev=m[2];
+              if(ev.id&&!seenIds[ev.id]&&ev.content&&ev.pubkey!==CW_PROJECT_PUBKEY){
+                seenIds[ev.id]=true;
+                bldg.communityNotes.push(ev);
+                // Queue profile fetch
+                if(!profileCache[ev.pubkey]&&!profilesNeeded[ev.pubkey]){
+                  profilesNeeded[ev.pubkey]=true;
+                }
+              }
+            }
+            if(m[0]==="EOSE"&&m[1]==="cw"+bldg.villageIdx){
+              gotEose=true;clearTimeout(timeout);
+              try{ws.send(JSON.stringify(["CLOSE","cw"+bldg.villageIdx]));ws.close();}catch(ce){}
+              // Fetch profiles for community note authors
+              var pks=Object.keys(profilesNeeded);
+              if(pks.length>0)fetchCommunityProfiles(pks,bldg);
+              // Sort and update
+              bldg.communityNotes.sort(function(a,b){return(b.created_at||0)-(a.created_at||0);});
+              bldg.updateCommunityWall();
+              // Try next relay for more notes
+              tryRelay();
+            }
+          }catch(pe){}
+        };
+        ws.onerror=function(){clearTimeout(timeout);tryRelay();};
+      }catch(re){tryRelay();}
+    }
+    tryRelay();
+  };
   village.push(bldg);return bldg;
 }
 
-function drawNoteWall(canvas){
+// ── Fetch profiles for community wall note authors ──
+function fetchCommunityProfiles(pks,bldg){
+  if(pks.length===0)return;
+  try{
+    var ws=new WebSocket('wss://relay.primal.net');
+    ws.onopen=function(){ws.send(JSON.stringify(["REQ","cwp",{kinds:[0],authors:pks}]));};
+    ws.onmessage=function(e){
+      try{var m=JSON.parse(e.data);
+        if(m[0]==="EVENT"&&m[2]&&m[2].kind===0){
+          var pk=m[2].pubkey;
+          try{var p=JSON.parse(m[2].content);
+            profileCache[pk]={name:p.name||p.display_name||'',picture:p.picture||''};
+            if(p.picture)loadProfileImg(pk,p.picture);
+          }catch(pe){}
+        }
+        if(m[0]==="EOSE"){
+          try{ws.send(JSON.stringify(["CLOSE","cwp"]));ws.close();}catch(ce){}
+          // Re-render community wall with profiles loaded
+          setTimeout(function(){bldg.updateCommunityWall();},800);
+        }
+      }catch(ee){}
+    };
+  }catch(ee){}
+}
+
+function drawCommunityWall(canvas,bldg){
   var ctx=canvas.getContext('2d');
   ctx.clearRect(0,0,1024,768);
-  // Dark background with subtle texture
+  // Dark background
   ctx.fillStyle='rgba(8,10,20,0.95)';ctx.fillRect(0,0,1024,768);
   // Decorative border
   ctx.strokeStyle='rgba(0,255,200,0.15)';ctx.lineWidth=2;
   ctx.strokeRect(30,30,964,708);
   ctx.strokeRect(40,40,944,688);
-  // Cross at top center
-  ctx.strokeStyle='rgba(0,255,200,0.3)';ctx.lineWidth=3;
-  ctx.beginPath();ctx.moveTo(512,60);ctx.lineTo(512,140);ctx.stroke();
-  ctx.beginPath();ctx.moveTo(472,100);ctx.lineTo(552,100);ctx.stroke();
+
+  var rootNoteId=COMMUNITY_WALL_NOTES[bldg.villageIdx];
+  var notes=bldg.communityNotes||[];
+  var hasRoot=!!rootNoteId;
+
   // Title
-  ctx.fillStyle='#00ffcc';ctx.font='bold 36px Courier New';ctx.textAlign='center';
-  ctx.fillText('COMMUNITY WALL',512,190);
-  ctx.font='20px Courier New';ctx.fillStyle='rgba(0,255,200,0.5)';
-  ctx.fillText('click here to leave a note on the wall',512,230);
+  ctx.fillStyle='#00ffcc';ctx.font='bold 28px Courier New';ctx.textAlign='center';
+  ctx.fillText('COMMUNITY WALL',512,75);
+
+  if(!hasRoot){
+    // No root note configured — show placeholder
+    ctx.font='16px Courier New';ctx.fillStyle='rgba(0,255,200,0.2)';
+    ctx.fillText('community wall coming soon...',512,350);
+    ctx.fillText('\u270E',512,400);
+    ctx.textAlign='left';
+    return;
+  }
+
+  // Subtitle / CTA
+  ctx.font='14px Courier New';ctx.fillStyle='rgba(0,255,200,0.45)';
+  ctx.fillText('click to leave a note on the wall',512,105);
+
   // Decorative line
   ctx.strokeStyle='rgba(0,255,200,0.12)';ctx.lineWidth=1;
-  ctx.beginPath();ctx.moveTo(200,250);ctx.lineTo(824,250);ctx.stroke();
-  // Placeholder message
-  ctx.fillStyle='rgba(0,255,200,0.15)';ctx.font='16px Courier New';
-  ctx.fillText('this wall is waiting for your thoughts...',512,350);
-  ctx.fillText('\u270E',512,400);
-  // Subtle grid lines (like blank paper)
-  ctx.strokeStyle='rgba(0,255,200,0.04)';ctx.lineWidth=0.5;
-  for(var y=280;y<700;y+=28){
-    ctx.beginPath();ctx.moveTo(80,y);ctx.lineTo(944,y);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(100,120);ctx.lineTo(924,120);ctx.stroke();
+
+  if(notes.length===0){
+    if(bldg.communityFetched){
+      ctx.fillStyle='rgba(0,255,200,0.2)';ctx.font='16px Courier New';
+      ctx.fillText('this wall is waiting for your thoughts...',512,350);
+      ctx.fillText('\u270E',512,400);
+    }else{
+      ctx.fillStyle='rgba(0,255,200,0.2)';ctx.font='14px Courier New';
+      ctx.fillText('loading community notes...',512,350);
+    }
+    ctx.textAlign='left';
+    return;
   }
+
+  // Render community notes in a nice layout
+  var startY=140;
+  var noteHeight=80;
+  var maxVisible=Math.min(notes.length,7);
+  var color='#00ffcc';
+
+  for(var i=0;i<maxVisible;i++){
+    var note=notes[i];
+    var ny=startY+i*noteHeight;
+    // Note card background
+    ctx.fillStyle='rgba(0,255,200,0.03)';
+    ctx.fillRect(60,ny,904,noteHeight-8);
+    ctx.strokeStyle='rgba(0,255,200,0.1)';ctx.lineWidth=1;
+    ctx.strokeRect(60,ny,904,noteHeight-8);
+
+    var pk=note.pubkey||'';
+    var prof=profileCache[pk];
+    var img=profileImgs[pk];
+
+    // Profile pic
+    if(img&&img!=='loading'&&img!=='failed'){
+      ctx.save();ctx.globalAlpha=0.7;
+      ctx.beginPath();ctx.arc(95,ny+noteHeight/2-4,18,0,Math.PI*2);ctx.closePath();ctx.clip();
+      try{ctx.drawImage(img,77,ny+noteHeight/2-22,36,36);}catch(de){}
+      ctx.restore();
+      ctx.globalAlpha=0.25;ctx.strokeStyle=color;ctx.lineWidth=1;
+      ctx.beginPath();ctx.arc(95,ny+noteHeight/2-4,18,0,Math.PI*2);ctx.stroke();ctx.globalAlpha=1;
+    }else{
+      // Initials circle
+      ctx.strokeStyle='rgba(0,255,200,0.2)';ctx.lineWidth=1;
+      ctx.beginPath();ctx.arc(95,ny+noteHeight/2-4,18,0,Math.PI*2);ctx.stroke();
+      ctx.fillStyle='rgba(0,255,200,0.3)';ctx.font='bold 14px Courier New';ctx.textAlign='center';
+      ctx.fillText(pk?pk.substring(0,2).toUpperCase():'??',95,ny+noteHeight/2+1);
+    }
+
+    // Name
+    ctx.textAlign='left';
+    ctx.fillStyle=color;ctx.globalAlpha=0.7;ctx.font='bold 12px Courier New';
+    ctx.fillText(prof&&prof.name?prof.name.substring(0,24):(pk.substring(0,16)+'...'),125,ny+18);
+
+    // Timestamp
+    ctx.globalAlpha=0.25;ctx.font='9px Courier New';
+    ctx.fillText(note.created_at?new Date(note.created_at*1000).toLocaleString():'',125,ny+32);
+    ctx.globalAlpha=1;
+
+    // Note content
+    var text=(note.content||'').replace(/https?:\/\/\S+/g,'').replace(/nostr:\S+/g,'').replace(/\n+/g,' ').trim();
+    if(!text)text='[media]';
+    ctx.fillStyle=color;ctx.globalAlpha=0.5;ctx.font='11px Courier New';
+    var words=text.split(/\s+/);var line='';var ty=ny+50;var lc=0;
+    for(var wi=0;wi<words.length&&lc<2;wi++){
+      var t=line+words[wi]+' ';
+      if(ctx.measureText(t).width>780){ctx.fillText(line,125,ty);line=words[wi]+' ';ty+=14;lc++;}
+      else{line=t;}
+    }
+    if(lc<2)ctx.fillText(line,125,ty);
+    ctx.globalAlpha=1;
+  }
+
+  // "more notes" indicator
+  if(notes.length>maxVisible){
+    ctx.textAlign='center';ctx.fillStyle='rgba(0,255,200,0.25)';ctx.font='11px Courier New';
+    ctx.fillText('+ '+(notes.length-maxVisible)+' more notes — click to read',512,startY+maxVisible*noteHeight+10);
+  }
+
+  // Bottom CTA
+  ctx.textAlign='center';ctx.fillStyle='rgba(0,255,200,0.3)';ctx.font='12px Courier New';
+  ctx.fillText('\u270E click this wall to write a note',512,740);
   ctx.textAlign='left';
 }
 
@@ -4274,7 +4504,8 @@ function enterBuilding(bldg){
   // Show wall note canvases
   for(var i=0;i<bldg.wallMeshes.length;i++)bldg.wallMeshes[i].visible=true;
   houseExitBtn.classList.add('v');houseLabelEl.classList.add('v');
-  houseLabelEl.textContent='drag to look \u2022 click note to read';
+  var hasCW=!!COMMUNITY_WALL_NOTES[bldg.villageIdx];
+  houseLabelEl.textContent=hasCW?'drag to look \u2022 click wall to read \u2022 click community wall to post':'drag to look \u2022 click note to read';
 }
 function exitBuilding(){
   if(!insideHouse||camTransDir!==0||!activeBldg)return;
@@ -4285,7 +4516,14 @@ function exitBuilding(){
   houseExitBtn.classList.remove('v');houseLabelEl.classList.remove('v');
 }
 houseExitBtn.addEventListener('click',function(e){e.stopPropagation();exitBuilding();});
-window.addEventListener('keydown',function(e){if(e.key==='Escape'&&insideHouse)exitBuilding();});
+window.addEventListener('keydown',function(e){
+  if(e.key==='Escape'){
+    // Close community wall modal first if open
+    var cwm=document.getElementById('cw-post-modal');
+    if(cwm&&cwm.classList.contains('open')){cwm.classList.remove('open');modalOpen=false;return;}
+    if(insideHouse)exitBuilding();
+  }
+});
 
 // Click detection for all village buildings
 var vRc=new THREE.Raycaster();
@@ -4308,22 +4546,35 @@ window.addEventListener('click',function(e){
   var my=-(e.clientY/(window.innerHeight||1))*2+1;
   vRc.setFromCamera(new THREE.Vector2(mx,my),camera);
   var hits=vRc.intersectObjects(activeBldg.wallMeshes);
-  if(hits.length>0&&hits[0].uv&&activeBldg.notes.length>0){
+  if(hits.length>0&&hits[0].uv){
     var wIdx=activeBldg.wallMeshes.indexOf(hits[0].object);
-    var col=Math.min(WALL_COLS-1,Math.floor(hits[0].uv.x*WALL_COLS));
-    var row=Math.min(WALL_ROWS-1,WALL_ROWS-1-Math.floor(hits[0].uv.y*WALL_ROWS));
-    var n=activeBldg.notes[(wIdx*WALL_COLS*WALL_ROWS+row*WALL_COLS+col)%activeBldg.notes.length];
-    if(n){
-      var pk=n.pubkey||'';var prof=profileCache[pk];var pImg=profileImgs[pk];
-      var profHtml='';
-      if(pImg&&pImg!=='loading'&&pImg!=='failed')profHtml+='<img src="'+pImg.src+'" alt="">';
-      else profHtml+='<div class="np-initials">'+(pk?pk.substring(0,2).toUpperCase():'??')+'</div>';
-      profHtml+='<div class="np-info"><div class="np-name">'+(prof&&prof.name?prof.name:'anonymous')+'</div>';
-      profHtml+='<div class="np-pk">'+pk.substring(0,32)+'...</div></div>';
-      noteProfile.innerHTML=profHtml;noteContent.textContent=n.content||'';
-      var ts=n.created_at?new Date(n.created_at*1000).toLocaleString():'';
-      noteMeta.innerHTML='<span>TIME: '+ts+'</span><span>ID: '+(n.id||'').substring(0,32)+'...</span>';
-      noteModal.classList.add('open');modalOpen=true;
+
+    // ── Community wall (wall index 3) ──
+    if(wIdx===3){
+      var rootNoteId=COMMUNITY_WALL_NOTES[activeBldg.villageIdx];
+      if(rootNoteId){
+        openCommunityWallModal(activeBldg);
+      }
+      return;
+    }
+
+    // ── Regular note walls (0-2) ──
+    if(activeBldg.notes.length>0){
+      var col=Math.min(WALL_COLS-1,Math.floor(hits[0].uv.x*WALL_COLS));
+      var row=Math.min(WALL_ROWS-1,WALL_ROWS-1-Math.floor(hits[0].uv.y*WALL_ROWS));
+      var n=activeBldg.notes[(wIdx*WALL_COLS*WALL_ROWS+row*WALL_COLS+col)%activeBldg.notes.length];
+      if(n){
+        var pk=n.pubkey||'';var prof=profileCache[pk];var pImg=profileImgs[pk];
+        var profHtml='';
+        if(pImg&&pImg!=='loading'&&pImg!=='failed')profHtml+='<img src="'+pImg.src+'" alt="">';
+        else profHtml+='<div class="np-initials">'+(pk?pk.substring(0,2).toUpperCase():'??')+'</div>';
+        profHtml+='<div class="np-info"><div class="np-name">'+(prof&&prof.name?prof.name:'anonymous')+'</div>';
+        profHtml+='<div class="np-pk">'+pk.substring(0,32)+'...</div></div>';
+        noteProfile.innerHTML=profHtml;noteContent.textContent=n.content||'';
+        var ts=n.created_at?new Date(n.created_at*1000).toLocaleString():'';
+        noteMeta.innerHTML='<span>TIME: '+ts+'</span><span>ID: '+(n.id||'').substring(0,32)+'...</span>';
+        noteModal.classList.add('open');modalOpen=true;
+      }
     }
   }
 });
@@ -4906,6 +5157,115 @@ function fetchUserProfile(pk){
     };
   }catch(ee){}
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// §27b COMMUNITY WALL — Post replies to root notes via NIP-07
+// ═══════════════════════════════════════════════════════════════════════════
+var cwPostModal=document.getElementById('cw-post-modal');
+var cwPostClose=document.getElementById('cw-post-close');
+var cwPostTextarea=document.getElementById('cw-post-textarea');
+var cwPostBtn=document.getElementById('cw-post-btn');
+var cwPostStatus=document.getElementById('cw-post-status');
+var cwPostLoginHint=document.getElementById('cw-post-login-hint');
+var cwPostCharcount=document.getElementById('cw-post-charcount');
+var cwPostHouseName=document.getElementById('cw-post-house-name');
+var cwPostTargetBldg=null;
+
+function openCommunityWallModal(bldg){
+  cwPostTargetBldg=bldg;
+  var name=bldg.npubData?bldg.npubData.name:'this building';
+  cwPostHouseName.textContent='Leave a note on '+name+"'s community wall";
+  cwPostTextarea.value='';cwPostStatus.textContent='';
+  cwPostCharcount.textContent='0 / 500';
+  cwPostBtn.disabled=true;
+  // Show/hide based on login state
+  if(nostrUser.pubkey&&nostrUser.signer==='nip07'){
+    cwPostTextarea.disabled=false;
+    cwPostTextarea.placeholder='Write your note here...';
+    cwPostLoginHint.classList.remove('v');
+    cwPostBtn.style.display='';
+  }else{
+    cwPostTextarea.disabled=true;
+    cwPostTextarea.placeholder='Log in with Nostr to post...';
+    cwPostLoginHint.classList.add('v');
+    cwPostBtn.style.display='none';
+  }
+  cwPostModal.classList.add('open');modalOpen=true;
+}
+
+cwPostClose.addEventListener('click',function(e){e.stopPropagation();cwPostModal.classList.remove('open');modalOpen=false;});
+cwPostModal.addEventListener('click',function(e){if(e.target===cwPostModal){cwPostModal.classList.remove('open');modalOpen=false;}});
+
+cwPostTextarea.addEventListener('input',function(){
+  var len=cwPostTextarea.value.length;
+  cwPostCharcount.textContent=len+' / 500';
+  cwPostBtn.disabled=len===0||len>500;
+});
+
+cwPostBtn.addEventListener('click',function(){
+  if(!cwPostTargetBldg||!nostrUser.pubkey||nostrUser.signer!=='nip07'||!window.nostr)return;
+  var rootNoteId=COMMUNITY_WALL_NOTES[cwPostTargetBldg.villageIdx];
+  if(!rootNoteId)return;
+  var content=cwPostTextarea.value.trim();
+  if(!content){cwPostStatus.textContent='Please write something first.';return;}
+
+  cwPostBtn.disabled=true;
+  cwPostStatus.textContent='Signing with your extension...';
+
+  // Build the reply event (NIP-10 compliant)
+  var event={
+    kind:1,
+    created_at:Math.floor(Date.now()/1000),
+    tags:[
+      ["e",rootNoteId,"wss://relay.primal.net","root"],
+      ["p",CW_PROJECT_PUBKEY]
+    ],
+    content:content
+  };
+
+  window.nostr.signEvent(event).then(function(signed){
+    cwPostStatus.textContent='Publishing to relays...';
+    var published=0;var failed=0;var total=CW_RELAY_LIST.length;
+    CW_RELAY_LIST.forEach(function(url){
+      try{
+        var ws=new WebSocket(url);
+        var done=false;
+        var timeout=setTimeout(function(){if(!done){done=true;failed++;checkDone();}try{ws.close();}catch(e){}},6000);
+        ws.onopen=function(){ws.send(JSON.stringify(["EVENT",signed]));};
+        ws.onmessage=function(e){
+          try{var m=JSON.parse(e.data);
+            if(m[0]==="OK"&&m[1]===signed.id){
+              if(!done){done=true;if(m[2])published++;else failed++;checkDone();}
+              clearTimeout(timeout);try{ws.close();}catch(ce){}
+            }
+          }catch(pe){}
+        };
+        ws.onerror=function(){if(!done){done=true;failed++;checkDone();}clearTimeout(timeout);};
+      }catch(re){failed++;checkDone();}
+    });
+    function checkDone(){
+      if(published+failed>=total){
+        if(published>0){
+          cwPostStatus.textContent='Posted to '+published+' relay'+(published>1?'s':'')+'!';
+          // Add to local community notes immediately
+          cwPostTargetBldg.communityNotes.unshift(signed);
+          cwPostTargetBldg.updateCommunityWall();
+          // Clear and close after a moment
+          setTimeout(function(){
+            cwPostModal.classList.remove('open');modalOpen=false;
+            cwPostTextarea.value='';cwPostStatus.textContent='';
+          },1500);
+        }else{
+          cwPostStatus.textContent='Failed to publish. Try again?';
+          cwPostBtn.disabled=false;
+        }
+      }
+    }
+  }).catch(function(err){
+    cwPostStatus.textContent='Signing failed: '+(err.message||err);
+    cwPostBtn.disabled=false;
+  });
+});
 
 // ═══════════════════════════════════════════════════════════════════════════
 // §28 ZAP THE VILLAGE TREE — NIP-57 Lightning Zaps
