@@ -5086,16 +5086,19 @@ var ruinsGroup=new THREE.Group();
 scene.add(ruinsGroup);
 (function buildDigitalRuins(){
   console.log('[TechnoAmish] Building Digital Ruins');
-  // Place ruins beyond the frontier lots, past the river
-  var RUINS_CX=230,RUINS_CZ=0;
+  // Place ruins well beyond the frontier lots — separated by open wasteland
+  var RUINS_CX=310,RUINS_CZ=0;
 
-  // Extend ground plane to cover ruins area
-  var ruinsGnd=new THREE.Mesh(
-    new THREE.PlaneGeometry(120,200),
-    new THREE.MeshStandardMaterial({color:0x060610,roughness:0.7,metalness:0.5,transparent:true,opacity:0.5})
+  // Extend ground plane from frontier all the way to the ruins (wasteland + ruins area)
+  var wastelandGnd=new THREE.Mesh(
+    new THREE.PlaneGeometry(250,300),
+    new THREE.MeshStandardMaterial({color:0x050510,roughness:0.8,metalness:0.4,transparent:true,opacity:0.45})
   );
-  ruinsGnd.rotation.x=-Math.PI/2;ruinsGnd.position.set(RUINS_CX,-0.02,RUINS_CZ);ruinsGroup.add(ruinsGnd);
-  // Darker grid for the ruins area
+  wastelandGnd.rotation.x=-Math.PI/2;wastelandGnd.position.set(220,-0.025,RUINS_CZ);ruinsGroup.add(wastelandGnd);
+  // Sparse grid for the wasteland
+  var wastelandGrid=new THREE.GridHelper(250,25,0x0a0505,0x050303);
+  wastelandGrid.position.set(220,0.005,RUINS_CZ);ruinsGroup.add(wastelandGrid);
+  // Denser darker grid for the ruins core
   var ruinsGrid=new THREE.GridHelper(120,12,0x1a0a0a,0x0a0505);
   ruinsGrid.position.set(RUINS_CX,0.01,RUINS_CZ);ruinsGroup.add(ruinsGrid);
 
@@ -5182,7 +5185,7 @@ scene.add(ruinsGroup);
 
   // Signpost at the entrance to the ruins area — tall and visible from frontier
   var signGroup=new THREE.Group();
-  signGroup.position.set(RUINS_CX-40,0,RUINS_CZ);
+  signGroup.position.set(RUINS_CX-60,0,RUINS_CZ);
   var signPost=new THREE.Mesh(new THREE.BoxGeometry(0.4,10,0.4),new THREE.MeshStandardMaterial({color:0x552222,roughness:0.9,emissive:0x331111,emissiveIntensity:0.1}));
   signPost.position.y=5;signGroup.add(signPost);
   var signBoard=new THREE.Mesh(new THREE.BoxGeometry(12,4,0.2),new THREE.MeshStandardMaterial({color:0x1a0808,roughness:0.8,emissive:0x440808,emissiveIntensity:0.15}));
@@ -5212,22 +5215,22 @@ scene.add(ruinsGroup);
   var ruinsLight2=new THREE.PointLight(0xff4422,0.6,60);
   ruinsLight2.position.set(RUINS_CX,3,RUINS_CZ);ruinsGroup.add(ruinsLight2);
 
-  // Road from frontier to ruins
+  // Road from frontier area to ruins — long wasteland road
   var ruinsRoadPts=[];
-  for(var rr=0;rr<=1;rr+=0.05){
-    var rx=RUINS_CX-55+rr*55;
+  for(var rr=0;rr<=1;rr+=0.02){
+    var rx=195+rr*(RUINS_CX+40-195);
     ruinsRoadPts.push(new THREE.Vector3(rx,0.03,RUINS_CZ));
   }
   ruinsGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(ruinsRoadPts),
-    new THREE.LineBasicMaterial({color:0x331111,transparent:true,opacity:0.3})));
+    new THREE.LineBasicMaterial({color:0x331111,transparent:true,opacity:0.25})));
   // Second lane
   var ruinsRoadPts2=[];
-  for(var rr2=0;rr2<=1;rr2+=0.05){
-    var rx2=RUINS_CX-55+rr2*55;
+  for(var rr2=0;rr2<=1;rr2+=0.02){
+    var rx2=195+rr2*(RUINS_CX+40-195);
     ruinsRoadPts2.push(new THREE.Vector3(rx2,0.03,RUINS_CZ+3));
   }
   ruinsGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(ruinsRoadPts2),
-    new THREE.LineBasicMaterial({color:0x331111,transparent:true,opacity:0.2})));
+    new THREE.LineBasicMaterial({color:0x331111,transparent:true,opacity:0.15})));
 })();
 
 // =====================================================================================
@@ -5272,12 +5275,13 @@ var grassPatchPos={x:30,z:-18}; // visible from default camera between barn and 
   var grassLight=new THREE.PointLight(0x44ff66,0.8,20);
   grassLight.position.set(0,4,0);grassGroup.add(grassLight);
 
-  // Invisible hit target for clicking
+  // Invisible hit target for clicking — extra large for easy mobile tapping
+  var hitRadius=isMobile?(patchRadius+5):(patchRadius+2);
   var hitDisc=new THREE.Mesh(
-    new THREE.CylinderGeometry(patchRadius+2,patchRadius+2,3,16),
+    new THREE.CylinderGeometry(hitRadius,hitRadius,6,16),
     new THREE.MeshBasicMaterial({visible:false})
   );
-  hitDisc.position.y=1.5;hitDisc.userData={touchGrass:true};grassGroup.add(hitDisc);
+  hitDisc.position.y=3;hitDisc.userData={touchGrass:true};grassGroup.add(hitDisc);
 
   // Prominent sign — larger and brighter
   var signC=document.createElement('canvas');signC.width=512;signC.height=128;
@@ -5351,18 +5355,41 @@ touchGrassOverlay.addEventListener('click',function(){
     touchGrassActive=false;
   },1500);
 });
-// Click grass patch in 3D world
+// Click/tap grass patch in 3D world
 var grassRc=new THREE.Raycaster();
-window.addEventListener('click',function(e){
-  if(e.target!==renderer.domElement||modalOpen||drMv||insideHouse||touchGrassActive)return;
-  var mx=(e.clientX/(window.innerWidth||1))*2-1;
-  var my=-(e.clientY/(window.innerHeight||1))*2+1;
+function tryTouchGrass(clientX,clientY){
+  if(modalOpen||insideHouse||touchGrassActive)return false;
+  var mx=(clientX/(window.innerWidth||1))*2-1;
+  var my=-(clientY/(window.innerHeight||1))*2+1;
   grassRc.setFromCamera(new THREE.Vector2(mx,my),camera);
   var hits=grassRc.intersectObjects(grassGroup.children,true);
   for(var i=0;i<hits.length;i++){
-    if(hits[i].object.userData.touchGrass){activateTouchGrass();return;}
+    if(hits[i].object.userData.touchGrass){activateTouchGrass();return true;}
   }
+  return false;
+}
+// Desktop click
+window.addEventListener('click',function(e){
+  if(e.target!==renderer.domElement||drMv||touchGrassActive)return;
+  tryTouchGrass(e.clientX,e.clientY);
 });
+// Mobile tap — use pointerup with short-tap detection (bypass drMv issues)
+if(isMobile){
+  var grassTapStart=0,grassTapX=0,grassTapY=0;
+  renderer.domElement.addEventListener('pointerdown',function(e){
+    if(e.pointerType!=='touch')return;
+    grassTapStart=Date.now();grassTapX=e.clientX;grassTapY=e.clientY;
+  });
+  renderer.domElement.addEventListener('pointerup',function(e){
+    if(e.pointerType!=='touch'||touchGrassActive)return;
+    var elapsed=Date.now()-grassTapStart;
+    var dx=Math.abs(e.clientX-grassTapX),dy=Math.abs(e.clientY-grassTapY);
+    // Quick tap with minimal movement
+    if(elapsed<350&&dx<20&&dy<20){
+      tryTouchGrass(e.clientX,e.clientY);
+    }
+  });
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // §24 BUILDING ENTER/EXIT SYSTEM
@@ -5744,7 +5771,13 @@ if(isMobile){
       }
     }
 
-    // 6. Village buildings — show info bar with name (tap still enters)
+    // 6. Touch Grass — activate on long-press
+    var grassHitsLP=lpRc.intersectObjects(grassGroup.children,true);
+    for(var ghi=0;ghi<grassHitsLP.length;ghi++){
+      if(grassHitsLP[ghi].object.userData.touchGrass){activateTouchGrass();return;}
+    }
+
+    // 7. Village buildings — show info bar with name (tap still enters)
     for(var bvi=0;bvi<village.length;bvi++){
       var allBM=[];village[bvi].grp.traverse(function(c){if(c.isMesh)allBM.push(c);});
       var bHits=lpRc.intersectObjects(allBM);
@@ -5881,7 +5914,7 @@ function anim(){
   var hudSub=document.getElementById('hud-sub');
   if(!insideHouse){
     var riverThreshold=VILLAGE_CX+55; // roughly where river is
-    var ruinsThreshold=210; // where the digital ruins begin
+    var ruinsThreshold=280; // where the digital ruins begin
     if(tgt.x>ruinsThreshold){hudTitle.textContent='THE OLD INTERNET';hudSub.textContent=isMobile?'the internet is dead // long live the internet':'digital ruins // "the internet is dead. long live the internet." \u2014 gigi';}
     else if(tgt.x>riverThreshold){hudTitle.textContent='NOSTR FRONTIER';hudSub.textContent=isMobile?'tap to interact // hold for details':'the frontier beyond the river // explore the unknown';}
     else if(tgt.x>60){hudTitle.textContent='NOSTR VILLAGE';hudSub.textContent=isMobile?'tap to enter // hold for preview':'a techno-amish community // click buildings to enter';}
