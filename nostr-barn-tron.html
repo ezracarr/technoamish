@@ -426,6 +426,14 @@ canvas{display:block;width:100%!important;height:100%!important;position:relativ
 /* ── Mobile info bar (replaces tooltip on touch devices) ── */
 #mobile-info-bar button:active{background:rgba(0,255,255,.25)!important;border-color:#0ff!important}
 
+/* ── Long-press radial indicator ── */
+#lp-ring{position:fixed;pointer-events:none;z-index:140;display:none;width:56px;height:56px;margin-left:-28px;margin-top:-28px}
+#lp-ring.v{display:block}
+#lp-ring svg{width:100%;height:100%;transform:rotate(-90deg)}
+#lp-ring circle.bg{fill:none;stroke:rgba(0,255,255,.15);stroke-width:3}
+#lp-ring circle.fg{fill:none;stroke:#0ff;stroke-width:3;stroke-dasharray:138.2;stroke-dashoffset:138.2;
+  transition:stroke-dashoffset .05s linear;filter:drop-shadow(0 0 4px rgba(0,255,255,.5))}
+
 /* ── Very small screens (small phones) ── */
 @media (max-width:400px){
   #hud h1{font-size:12px;letter-spacing:3px}
@@ -511,6 +519,8 @@ canvas{display:block;width:100%!important;height:100%!important;position:relativ
 <div id="tl">Builders</div>
 <div id="tc">0</div>
 <div id="tooltip"><div class="cat"></div><div class="name"></div><div class="desc"></div><div class="hint">[ CLICK TO ACCESS ]</div></div>
+<!-- Long-press radial indicator -->
+<div id="lp-ring"><svg viewBox="0 0 50 50"><circle class="bg" cx="25" cy="25" r="22"/><circle class="fg" id="lp-fg" cx="25" cy="25" r="22"/></svg></div>
 <div id="legend"></div>
 <div id="nav-pad">
   <div class="nr"><div class="nav-btn" data-dir="fwd">&#9650;</div><div style="width:6px"></div><div class="nav-btn" id="zoom-in">+</div></div>
@@ -1842,7 +1852,67 @@ var isMobile=(function(){return 'ontouchstart' in window||navigator.maxTouchPoin
 // Update explainer text for mobile
 if(isMobile){
   var explainerEl=document.getElementById('explainer');
-  if(explainerEl)explainerEl.textContent='NOSTR is an open source community driven protocol. Tap on pieces of the barn to see many (but by no means all) of the load bearing projects that make NOSTR work.';
+  if(explainerEl)explainerEl.textContent='NOSTR is an open source community driven protocol. Tap on pieces of the barn to see many (but by no means all) of the load bearing projects that make NOSTR work. Hold to preview details.';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MOBILE LONG-PRESS SYSTEM
+// Hold finger in place ~400ms to trigger "hover preview" action.
+// Moving finger > 12px cancels. Visual radial ring shows progress.
+// ═══════════════════════════════════════════════════════════════
+var lpRing=document.getElementById('lp-ring');
+var lpFg=document.getElementById('lp-fg');
+var LP_DURATION=400; // ms to hold for long-press
+var LP_MOVE_THRESHOLD=12; // px movement cancels
+var lpTimer=null,lpStartX=0,lpStartY=0,lpActive=false,lpFired=false;
+var lpAnimFrame=null,lpStartTime=0;
+
+function lpStartRing(x,y){
+  lpRing.style.left=x+'px';lpRing.style.top=y+'px';
+  lpFg.style.strokeDashoffset='138.2';
+  lpRing.classList.add('v');lpStartTime=Date.now();
+  function animRing(){
+    var elapsed=Date.now()-lpStartTime;
+    var progress=Math.min(elapsed/LP_DURATION,1);
+    lpFg.style.strokeDashoffset=(138.2*(1-progress)).toFixed(1);
+    if(progress<1&&lpActive)lpAnimFrame=requestAnimationFrame(animRing);
+  }
+  lpAnimFrame=requestAnimationFrame(animRing);
+}
+function lpCancelRing(){
+  lpRing.classList.remove('v');
+  if(lpAnimFrame){cancelAnimationFrame(lpAnimFrame);lpAnimFrame=null;}
+}
+function lpCancel(){
+  clearTimeout(lpTimer);lpTimer=null;lpActive=false;lpCancelRing();
+}
+
+// The long-press raycast callback — will be set up after all scene objects exist
+var lpOnFire=null; // set later
+
+if(isMobile){
+  renderer.domElement.addEventListener('pointerdown',function(e){
+    if(e.pointerType!=='touch'||insideHouse||modalOpen)return;
+    lpStartX=e.clientX;lpStartY=e.clientY;lpActive=true;lpFired=false;
+    lpStartRing(e.clientX,e.clientY);
+    lpTimer=setTimeout(function(){
+      if(!lpActive)return;
+      lpFired=true;lpActive=false;lpCancelRing();
+      // Fire the long-press handler
+      if(lpOnFire)lpOnFire(lpStartX,lpStartY);
+    },LP_DURATION);
+  });
+  renderer.domElement.addEventListener('pointermove',function(e){
+    if(!lpActive)return;
+    var dx=e.clientX-lpStartX,dy=e.clientY-lpStartY;
+    if(Math.sqrt(dx*dx+dy*dy)>LP_MOVE_THRESHOLD){lpCancel();}
+  });
+  renderer.domElement.addEventListener('pointerup',function(){lpCancel();});
+  renderer.domElement.addEventListener('pointercancel',function(){lpCancel();});
+  // Suppress the click event that fires after a successful long-press
+  renderer.domElement.addEventListener('click',function(e){
+    if(lpFired){e.stopImmediatePropagation();e.preventDefault();lpFired=false;}
+  },true); // capture phase to run before other click handlers
 }
 
 function updateFPCam(){
@@ -5010,6 +5080,159 @@ function tryDeepLinkEnterBuilding(){
 })();
 
 // ═══════════════════════════════════════════════════════════════════════════
+// §24b MOBILE LONG-PRESS HANDLER — raycast to identify what was held
+//      This must come after all interactive objects are created.
+// ═══════════════════════════════════════════════════════════════════════════
+if(isMobile){
+  var lpRc=new THREE.Raycaster();
+  lpOnFire=function(cx,cy){
+    var mx=(cx/(window.innerWidth||1))*2-1;
+    var my=-(cy/(window.innerHeight||1))*2+1;
+    lpRc.setFromCamera(new THREE.Vector2(mx,my),camera);
+
+    // 1. Barn parts — show mobile info bar
+    var barnHits=lpRc.intersectObjects(allP.map(function(p){return p.m}));
+    if(barnHits.length>0){
+      var idx=barnHits[0].object.userData.pi;
+      if(idx!==undefined&&REPOS[idx]){
+        showMobileInfoBar(REPOS[idx],idx);
+        return;
+      }
+    }
+
+    // 2. GM Garden plants — open note modal
+    if(FT.gdn&&gmPlants.length>0){
+      var gBoxes=getGardenHitBoxes();
+      if(gBoxes.length>0){
+        var gHits=lpRc.intersectObjects(gBoxes);
+        if(gHits.length>0){
+          var pi=gHits[0].object.userData.plantIdx;
+          var gn=gmPlants[pi]?gmPlants[pi].note:null;
+          if(gn){
+            var pk=gn.pubkey||'';var prof=profileCache[pk];var pImg=profileImgs[pk];
+            var profHtml='';
+            if(pImg&&pImg!=='loading'&&pImg!=='failed')profHtml+='<img src="'+pImg.src+'" alt="">';
+            else profHtml+='<div class="np-initials">'+(pk?pk.substring(0,2).toUpperCase():'??')+'</div>';
+            profHtml+='<div class="np-info"><div class="np-name">'+(prof&&prof.name?prof.name:'anonymous')+'</div>';
+            profHtml+='<div class="np-pk">'+pk.substring(0,32)+'...</div></div>';
+            noteProfile.innerHTML=profHtml;noteContent.textContent=gn.content||'';
+            var ts=gn.created_at?new Date(gn.created_at*1000).toLocaleString():'';
+            noteMeta.innerHTML='<span>TIME: '+ts+'</span><span style="color:rgba(0,255,200,.4)">\uD83C\uDF31 GM Garden \u2022 '+plantTypes[pi%plantTypes.length]+'</span>';
+            noteModal.classList.add('open');modalOpen=true;
+          }else{
+            noteProfile.innerHTML='<div class="np-initials">\uD83C\uDF31</div><div class="np-info"><div class="np-name">GM Garden</div><div class="np-pk">'+plantTypes[pi%plantTypes.length]+'</div></div>';
+            noteContent.textContent='This plant is still growing — notes are being fetched from relays. Try again in a moment!';
+            noteMeta.innerHTML='';
+            noteModal.classList.add('open');modalOpen=true;
+          }
+          return;
+        }
+      }
+    }
+
+    // 3. Fish — show note (catch)
+    if(fishes.length>0){
+      var fishHitMeshes=fishes.map(function(f){return f.mesh.userData.hitMesh;});
+      var fHits=lpRc.intersectObjects(fishHitMeshes);
+      if(fHits.length>0){
+        for(var fi=0;fi<fishes.length;fi++){
+          if(fishes[fi].mesh.userData.hitMesh===fHits[0].object){
+            var fish=fishes[fi];
+            if(!fish.note)break;
+            fish.caught=true;var origY=fish.mesh.position.y;
+            fish.mesh.position.y=2;
+            setTimeout(function(){fish.mesh.position.y=origY;fish.caught=false;},1500);
+            var fn=fish.note;var fpk=fn.pubkey||'';var fprof=profileCache[fpk];var fpImg=profileImgs[fpk];
+            var fpHtml='';
+            if(fpImg&&fpImg!=='loading'&&fpImg!=='failed')fpHtml+='<img src="'+fpImg.src+'" alt="">';
+            else fpHtml+='<div class="np-initials">'+(fpk?fpk.substring(0,2).toUpperCase():'??')+'</div>';
+            fpHtml+='<div class="np-info"><div class="np-name">'+(fprof&&fprof.name?fprof.name:'anonymous')+'</div>';
+            fpHtml+='<div class="np-pk">'+fpk.substring(0,32)+'...</div></div>';
+            noteProfile.innerHTML=fpHtml;noteContent.textContent=fn.content||'';
+            var fts=fn.created_at?new Date(fn.created_at*1000).toLocaleString():'';
+            noteMeta.innerHTML='<span>TIME: '+fts+'</span><span style="color:rgba(0,180,255,.5)">\uD83C\uDFA3 Caught in the river!</span>';
+            noteModal.classList.add('open');modalOpen=true;
+            break;
+          }
+        }
+        return;
+      }
+    }
+
+    // 4. Village tree — show info bar about zapping
+    if(typeof treeHitMesh!=='undefined'){
+      var tHits=lpRc.intersectObjects([treeHitMesh]);
+      if(tHits.length>0){
+        if(!mobileInfoBar){
+          mobileInfoBar=document.createElement('div');
+          mobileInfoBar.id='mobile-info-bar';
+          mobileInfoBar.style.cssText='position:fixed;bottom:0;left:0;right:0;z-index:150;background:rgba(4,8,16,.96);border-top:1px solid rgba(0,255,255,.5);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;font-family:"Courier New",monospace;transition:transform .25s;transform:translateY(100%)';
+          document.body.appendChild(mobileInfoBar);
+        }
+        mobileInfoBar.innerHTML='<div style="flex:1;min-width:0"><div style="font-size:8px;text-transform:uppercase;letter-spacing:2px;color:#ffaa00;margin-bottom:3px">\u26A1 Village Tree</div><div style="font-size:13px;color:#fff;font-weight:bold">Zap to grow!</div><div style="font-size:10px;color:rgba(255,170,0,.5);margin-top:2px">'+(nostrUser.pubkey?'Tap the tree to send sats':'Login with Nostr first, then tap to zap')+'</div></div>';
+        mobileInfoBar.style.transform='translateY(0)';
+        mobileInfoIdx=-1;
+        clearTimeout(mobileInfoTimer);
+        mobileInfoTimer=setTimeout(function(){hideMobileInfoBar();},5000);
+        return;
+      }
+    }
+
+    // 5. Frontier lots — show info bar
+    if(typeof frontierLotState!=='undefined'&&frontierLotState.length>0){
+      var frHitMeshes=frontierLotState.map(function(l){return l.hitMesh;});
+      var frHits=lpRc.intersectObjects(frHitMeshes);
+      if(frHits.length>0){
+        var fli=frHits[0].object.userData.frontierIdx;
+        if(fli!==undefined){
+          var lot=frontierLotState[fli];
+          if(!mobileInfoBar){
+            mobileInfoBar=document.createElement('div');
+            mobileInfoBar.id='mobile-info-bar';
+            mobileInfoBar.style.cssText='position:fixed;bottom:0;left:0;right:0;z-index:150;background:rgba(4,8,16,.96);border-top:1px solid rgba(0,255,255,.5);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;font-family:"Courier New",monospace;transition:transform .25s;transform:translateY(100%)';
+            document.body.appendChild(mobileInfoBar);
+          }
+          if(lot.claimed){
+            mobileInfoBar.innerHTML='<div style="flex:1;min-width:0"><div style="font-size:8px;text-transform:uppercase;letter-spacing:2px;color:#00ffcc;margin-bottom:3px">\uD83C\uDFE0 Frontier House</div><div style="font-size:13px;color:#fff;font-weight:bold">'+(lot.ownerName||'Frontier Settler')+'\'s House</div><div style="font-size:10px;color:rgba(0,255,200,.5);margin-top:2px">Lot #'+(fli+1)+' \u2014 Built with a \u26A1 zap</div></div>';
+          }else{
+            mobileInfoBar.innerHTML='<div style="flex:1;min-width:0"><div style="font-size:8px;text-transform:uppercase;letter-spacing:2px;color:#ff8844;margin-bottom:3px">\u26A1 Frontier Lot \u2014 For Sale</div><div style="font-size:13px;color:#fff;font-weight:bold">Lot #'+(fli+1)+'</div><div style="font-size:10px;color:rgba(255,136,68,.5);margin-top:2px">'+(nostrUser.pubkey?'Tap to zap 1000+ sats and claim this land':'Login first, then tap to claim')+'</div></div>';
+          }
+          mobileInfoBar.style.transform='translateY(0)';
+          mobileInfoIdx=-1;
+          clearTimeout(mobileInfoTimer);
+          mobileInfoTimer=setTimeout(function(){hideMobileInfoBar();},5000);
+          return;
+        }
+      }
+    }
+
+    // 6. Village buildings — show info bar with name (tap still enters)
+    for(var bvi=0;bvi<village.length;bvi++){
+      var allBM=[];village[bvi].grp.traverse(function(c){if(c.isMesh)allBM.push(c);});
+      var bHits=lpRc.intersectObjects(allBM);
+      if(bHits.length>0){
+        var bldg=village[bvi];
+        var bName=(bldg.npubData&&bldg.npubData.name)?bldg.npubData.name:'Unknown';
+        var bType=(BLDG_LAYOUTS[bvi]&&BLDG_LAYOUTS[bvi].type)||'house';
+        if(!mobileInfoBar){
+          mobileInfoBar=document.createElement('div');
+          mobileInfoBar.id='mobile-info-bar';
+          mobileInfoBar.style.cssText='position:fixed;bottom:0;left:0;right:0;z-index:150;background:rgba(4,8,16,.96);border-top:1px solid rgba(0,255,255,.5);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;font-family:"Courier New",monospace;transition:transform .25s;transform:translateY(100%)';
+          document.body.appendChild(mobileInfoBar);
+        }
+        var typeLabel=bType==='shop'?'\uD83C\uDFEA Shop':bType==='church'?'\u26EA Church':'\uD83C\uDFE0 House';
+        mobileInfoBar.innerHTML='<div style="flex:1;min-width:0"><div style="font-size:8px;text-transform:uppercase;letter-spacing:2px;color:#00cccc;margin-bottom:3px">'+typeLabel+'</div><div style="font-size:13px;color:#fff;font-weight:bold">'+bName+'\'s Place</div><div style="font-size:10px;color:rgba(0,255,255,.5);margin-top:2px">Tap to enter \u2022 '+(bldg.notes.length||0)+' notes inside</div></div>';
+        mobileInfoBar.style.transform='translateY(0)';
+        mobileInfoIdx=-1;
+        clearTimeout(mobileInfoTimer);
+        mobileInfoTimer=setTimeout(function(){hideMobileInfoBar();},4000);
+        return;
+      }
+    }
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // §25 RENDER LOOP
 // ═══════════════════════════════════════════════════════════════════════════
 var clk=new THREE.Clock();var time=0;
@@ -5120,9 +5343,9 @@ function anim(){
   var hudSub=document.getElementById('hud-sub');
   if(!insideHouse){
     var riverThreshold=VILLAGE_CX+55; // roughly where river is
-    if(tgt.x>riverThreshold){hudTitle.textContent='NOSTR FRONTIER';hudSub.textContent=isMobile?'tap to explore':'the frontier beyond the river // explore the unknown';}
-    else if(tgt.x>60){hudTitle.textContent='NOSTR VILLAGE';hudSub.textContent=isMobile?'tap buildings to enter':'a techno-amish community // click buildings to enter';}
-    else{hudTitle.textContent='NOSTR BARN';hudSub.textContent=isMobile?'tap to explore // pinch to zoom':'100 projects // hover + click to explore';}
+    if(tgt.x>riverThreshold){hudTitle.textContent='NOSTR FRONTIER';hudSub.textContent=isMobile?'tap to interact // hold for details':'the frontier beyond the river // explore the unknown';}
+    else if(tgt.x>60){hudTitle.textContent='NOSTR VILLAGE';hudSub.textContent=isMobile?'tap to enter // hold for preview':'a techno-amish community // click buildings to enter';}
+    else{hudTitle.textContent='NOSTR BARN';hudSub.textContent=isMobile?'tap to explore // hold for details':'100 projects // hover + click to explore';}
   }else if(activeBldg){
     var bn=activeBldg.npubData?activeBldg.npubData.name:'';
     hudTitle.textContent=bn?bn.toUpperCase()+"'S PLACE":'INSIDE';
