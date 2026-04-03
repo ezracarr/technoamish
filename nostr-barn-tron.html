@@ -1559,8 +1559,12 @@ noteModal.addEventListener('click',function(e){if(e.target===noteModal){noteModa
 // Raycaster for cell clicks
 var cellRc=new THREE.Raycaster();
 var cellMeshes=radarCells.map(function(c){return c.mesh;});
+// Priority click check — set later by features that overlap radar cells
+var cellClickPriorityCheck=null; // function(clientX,clientY) → true if handled
 window.addEventListener('click',function(e){
   if(e.target!==renderer.domElement||modalOpen||drMv||insideHouse)return;
+  // Check priority overlays first (e.g. Touch Grass patch over radar cells)
+  if(cellClickPriorityCheck&&cellClickPriorityCheck(e.clientX,e.clientY))return;
   // Check if clicking on a garden plant first — garden takes priority
   if(FT.gdn&&gmPlants.length>0){
     var boxes=getGardenHitBoxes();
@@ -2150,9 +2154,21 @@ window.addEventListener('keyup',function(e){
 // ═══════════════════════════════════════════════════════════════════════════
 var tt=document.getElementById('tooltip'),ttC=tt.querySelector('.cat'),ttN=tt.querySelector('.name'),ttD=tt.querySelector('.desc');
 var hP=null;
-var tooltipLocked=false; // 'garden'|'fish'|false — tracks which system owns the tooltip
+var tooltipLocked=false; // 'garden'|'fish'|'grass'|false — tracks which system owns the tooltip
+var hoverPriorityCheck=null; // function(e) → true if handled (set later by grass patch etc.)
 window.addEventListener('pointermove',function(e){
   if(insideHouse)return;
+  // Priority hover check (e.g. Touch Grass patch)
+  if(hoverPriorityCheck&&hoverPriorityCheck(e)){
+    if(hP){
+      var prevRepo=REPOS[hP.i];var isMatch=activeCat&&prevRepo&&prevRepo.cat===activeCat;
+      var restoreColor=isMatch?CIhex[activeCat]:TEAL;var restoreOpacity=activeCat?(isMatch?0.9:0.15):0.55;
+      var restoreEmI=activeCat?(isMatch?0.12:0.01):0.04;
+      hP.mt.emissive.setHex(restoreColor);hP.mt.emissiveIntensity=restoreEmI;hP.mt.color.setHex(0x101025);
+      hP.em.color.setHex(restoreColor);hP.em.opacity=restoreOpacity;hP.m.scale.set(1,1,1);hP=null;
+    }
+    return;
+  }
   // Garden plants take priority — skip barn hover if over the garden
   if(FT.gdn&&gmPlants.length>0){
     var boxes=getGardenHitBoxes();
@@ -5368,11 +5384,33 @@ function tryTouchGrass(clientX,clientY){
   }
   return false;
 }
-// Desktop click
-window.addEventListener('click',function(e){
-  if(e.target!==renderer.domElement||drMv||touchGrassActive)return;
-  tryTouchGrass(e.clientX,e.clientY);
-});
+// Register as priority check so radar cell clicks don't steal the click
+cellClickPriorityCheck=tryTouchGrass;
+// Register hover priority — show tooltip + pointer cursor over grass patch
+var grassHoverRc=new THREE.Raycaster();
+hoverPriorityCheck=function(e){
+  if(touchGrassActive)return false;
+  var mx=(e.clientX/(window.innerWidth||1))*2-1;
+  var my=-(e.clientY/(window.innerHeight||1))*2+1;
+  grassHoverRc.setFromCamera(new THREE.Vector2(mx,my),camera);
+  var hits=grassHoverRc.intersectObjects(grassGroup.children,true);
+  for(var i=0;i<hits.length;i++){
+    if(hits[i].object.userData.touchGrass){
+      ttC.textContent='EASTER EGG';ttC.style.color='#44ff66';
+      ttN.textContent='Touch Grass';
+      ttD.textContent='"Touching grass helps too." \u2014 Gigi';
+      tt.querySelector('.hint').textContent='[ CLICK TO TOUCH GRASS ]';
+      tt.style.opacity='1';
+      tt.style.left=Math.min(e.clientX+15,(window.innerWidth||800)-380)+'px';
+      tt.style.top=Math.min(e.clientY+15,(window.innerHeight||600)-120)+'px';
+      renderer.domElement.style.cursor='pointer';
+      tooltipLocked='grass';
+      return true;
+    }
+  }
+  if(tooltipLocked==='grass'){tooltipLocked=false;tt.style.opacity='0';renderer.domElement.style.cursor='default';}
+  return false;
+};
 // Mobile tap — use pointerup with short-tap detection (bypass drMv issues)
 if(isMobile){
   var grassTapStart=0,grassTapX=0,grassTapY=0;
