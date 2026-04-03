@@ -121,6 +121,27 @@ canvas{display:block;width:100%!important;height:100%!important;position:relativ
   animation:explainerFade 10s ease-in forwards}
 @keyframes explainerFade{0%,60%{opacity:1}100%{opacity:0;visibility:hidden}}
 
+/* ── Touch Grass Overlay ── */
+#touch-grass-overlay{position:fixed;inset:0;z-index:250;display:none;align-items:center;justify-content:center;
+  background:rgba(2,12,4,.92);pointer-events:auto;cursor:pointer;flex-direction:column;
+  opacity:0;transition:opacity 1.5s ease-in}
+#touch-grass-overlay.v{display:flex;opacity:1}
+#touch-grass-overlay.fade-out{opacity:0}
+#touch-grass-overlay .tg-quote{max-width:540px;padding:0 24px;font:15px/2 'Courier New',monospace;
+  color:rgba(140,220,140,.7);text-align:center;letter-spacing:0.5px;
+  opacity:0;transform:translateY(20px);transition:opacity 2s ease 0.8s,transform 2s ease 0.8s}
+#touch-grass-overlay.v .tg-quote{opacity:1;transform:translateY(0)}
+#touch-grass-overlay .tg-attr{font-size:11px;color:rgba(100,180,100,.4);margin-top:16px;letter-spacing:2px;
+  font-family:'Courier New',monospace;opacity:0;transition:opacity 2s ease 2s}
+#touch-grass-overlay.v .tg-attr{opacity:1}
+#touch-grass-overlay .tg-hint{font-size:10px;color:rgba(100,180,100,.25);margin-top:32px;letter-spacing:3px;
+  font-family:'Courier New',monospace;text-transform:uppercase;opacity:0;transition:opacity 1.5s ease 4s}
+#touch-grass-overlay.v .tg-hint{opacity:1}
+#touch-grass-overlay .tg-blades{position:absolute;bottom:0;left:0;right:0;height:120px;overflow:hidden;pointer-events:none}
+#touch-grass-overlay .tg-blade{position:absolute;bottom:0;width:3px;background:linear-gradient(to top,rgba(50,160,60,.6),rgba(80,200,80,0));
+  border-radius:2px;transform-origin:bottom center;animation:grassSway 3s ease-in-out infinite alternate}
+@keyframes grassSway{0%{transform:rotate(-8deg)}50%{transform:rotate(5deg)}100%{transform:rotate(-3deg)}}
+
 /* ── Deep Link Welcome Overlay ── */
 #deeplink-welcome{position:fixed;inset:0;z-index:280;display:none;align-items:center;justify-content:center;
   background:rgba(2,4,10,.82);pointer-events:auto;cursor:pointer;
@@ -661,6 +682,14 @@ canvas{display:block;width:100%!important;height:100%!important;position:relativ
     <div id="cw-post-status"></div>
     <div id="cw-post-login-hint">&#128273; Log in with Nostr to post on the community wall</div>
   </div>
+</div>
+
+<!-- Touch Grass Overlay -->
+<div id="touch-grass-overlay">
+  <div class="tg-quote">&ldquo;Touching grass helps too. Talking to real humans, in real life, about real things. With your own weird idiosyncrasies and weights and hallucinations.&rdquo;</div>
+  <div class="tg-attr">&mdash; Gigi, &ldquo;What&rsquo;s left of the internet?&rdquo;</div>
+  <div class="tg-hint">click anywhere to return</div>
+  <div class="tg-blades"></div>
 </div>
 
 <!-- About Modal -->
@@ -2429,7 +2458,12 @@ var proverbs=[
   "A fence around the protocol protects no one","If you want a thing well done — write a NIP",
   "Make hay while the relay shines","The barn is only as strong as its weakest board",
   "Every note plants a seed","Freedom is not free — it requires good keys",
-  "The network belongs to those who show up","Patience and the relay solve everything"
+  "The network belongs to those who show up","Patience and the relay solve everything",
+  "\u201CJoin the Amish, or generate a keypair and join another weird cult.\u201D \u2014 Gigi",
+  "\u201CI didn\u2019t leave the internet \u2014 the internet left me.\u201D \u2014 Gigi",
+  "\u201CThe internet is dead. Long live the internet.\u201D \u2014 Gigi",
+  "\u201CTouching grass helps too. Talking to real humans, in real life, about real things.\u201D \u2014 Gigi",
+  "\u201CI\u2019m bullish on humanity.\u201D \u2014 Gigi"
 ];
 var prvBar=document.getElementById('proverb-bar'),prvText=document.getElementById('proverb-text');
 prvText.textContent=proverbs.join('    \u2022    ')+'    \u2022    '+proverbs.join('    \u2022    ');
@@ -5042,7 +5076,281 @@ function fetchFrontierProfiles(pks){
 // Start fetching frontier zaps after a delay (let relays connect first)
 setTimeout(fetchFrontierZaps,4000);
 
-// ── Frontier lot hover/click/zap handlers are in §29 (after §28 login/zap system) ──
+// ── Frontier lot hover/click/zap handlers are in section 29 (after login/zap system) ──
+
+// =====================================================================================
+// DIGITAL RUINS -- Crumbling structures beyond the frontier (inspired by Gigi's article)
+// "The internet is dead. Long live the internet."
+// =====================================================================================
+var ruinsGroup=new THREE.Group();
+scene.add(ruinsGroup);
+(function buildDigitalRuins(){
+  // Place ruins far beyond the frontier lots, past the river on the far side
+  var RUINS_CX=260,RUINS_CZ=0;
+
+  // Extend ground plane to cover ruins area
+  var ruinsGnd=new THREE.Mesh(
+    new THREE.PlaneGeometry(120,200),
+    new THREE.MeshStandardMaterial({color:0x060610,roughness:0.7,metalness:0.5,transparent:true,opacity:0.5})
+  );
+  ruinsGnd.rotation.x=-Math.PI/2;ruinsGnd.position.set(RUINS_CX,-0.02,RUINS_CZ);ruinsGroup.add(ruinsGnd);
+  // Darker grid for the ruins area
+  var ruinsGrid=new THREE.GridHelper(120,12,0x1a0a0a,0x0a0505);
+  ruinsGrid.position.set(RUINS_CX,0.01,RUINS_CZ);ruinsGroup.add(ruinsGrid);
+
+  // Materials -- muted reds and grays, decayed look
+  var ruinMat=new THREE.MeshStandardMaterial({color:0x331111,roughness:0.8,metalness:0.3,transparent:true,opacity:0.5,emissive:0x220808,emissiveIntensity:0.05});
+  var ruinEdge=new THREE.LineBasicMaterial({color:0x662222,transparent:true,opacity:0.25});
+  var ruinGlow=new THREE.MeshBasicMaterial({color:0xff2222,transparent:true,opacity:0.04,side:THREE.DoubleSide});
+
+  // Abstract "walled gardens" -- tall enclosures you can't enter
+  var wallDefs=[
+    {x:RUINS_CX-30,z:RUINS_CZ-25,w:18,d:14,h:12,label:'WALLED GARDEN',sub:'Convenience Inside \u2014 Identity Required'},
+    {x:RUINS_CX+15,z:RUINS_CZ+20,w:14,d:16,h:10,label:'FEED MACHINE',sub:'Maximally Addicting \u2014 Maximally Surveilled'},
+    {x:RUINS_CX+30,z:RUINS_CZ-30,w:12,d:12,h:14,label:'SLOP FACTORY',sub:'One-Shot Prompts \u2014 Middle of the Curve'},
+    {x:RUINS_CX-20,z:RUINS_CZ+30,w:16,d:10,h:8,label:'EYEBALL SCANNER',sub:'Biometric Entry \u2014 No Exit'},
+    {x:RUINS_CX+5,z:RUINS_CZ-10,w:10,d:10,h:16,label:'DATA SILO',sub:'Your Data \u2014 Their Profit'}
+  ];
+
+  for(var wi=0;wi<wallDefs.length;wi++){
+    var wd=wallDefs[wi];
+    var wg=new THREE.Group();wg.position.set(wd.x,0,wd.z);
+
+    // Crumbling walls -- boxes with missing pieces
+    var wallGeo=new THREE.BoxGeometry(wd.w,wd.h,wd.d);
+    var wallMesh=new THREE.Mesh(wallGeo,ruinMat.clone());
+    wallMesh.position.y=wd.h/2;
+    wallMesh.material.opacity=0.15+Math.random()*0.15;
+    wg.add(wallMesh);
+
+    // Wireframe edges
+    var edges=new THREE.EdgesGeometry(wallGeo);
+    var edgeLine=new THREE.LineSegments(edges,ruinEdge.clone());
+    edgeLine.position.y=wd.h/2;wg.add(edgeLine);
+
+    // Fallen/broken pieces scattered around base
+    for(var pi=0;pi<3+Math.floor(Math.random()*4);pi++){
+      var pw=1+Math.random()*3,ph=0.5+Math.random()*2,pd=1+Math.random()*3;
+      var piece=new THREE.Mesh(new THREE.BoxGeometry(pw,ph,pd),ruinMat.clone());
+      piece.material.opacity=0.2+Math.random()*0.15;
+      piece.position.set((Math.random()-0.5)*wd.w*1.3,ph/2,(Math.random()-0.5)*wd.d*1.3);
+      piece.rotation.set(Math.random()*0.3,Math.random()*Math.PI,Math.random()*0.3);
+      wg.add(piece);
+      var pe=new THREE.LineSegments(new THREE.EdgesGeometry(piece.geometry),ruinEdge.clone());
+      pe.position.copy(piece.position);pe.rotation.copy(piece.rotation);wg.add(pe);
+    }
+
+    // Faint red glow from within (the surveillance eye)
+    var glowGeo=new THREE.SphereGeometry(Math.min(wd.w,wd.d)*0.3,8,8);
+    var glowMesh=new THREE.Mesh(glowGeo,ruinGlow.clone());
+    glowMesh.position.y=wd.h*0.4;wg.add(glowMesh);
+
+    // Label sprite
+    var lc=document.createElement('canvas');lc.width=512;lc.height=128;
+    var lx=lc.getContext('2d');
+    lx.fillStyle='rgba(255,60,60,0.7)';lx.font='bold 22px Courier New';lx.textAlign='center';
+    lx.fillText(wd.label,256,40);
+    lx.fillStyle='rgba(255,100,100,0.35)';lx.font='13px Courier New';
+    lx.fillText(wd.sub,256,72);
+    // Strikethrough line across the label
+    lx.strokeStyle='rgba(255,60,60,0.4)';lx.lineWidth=2;
+    lx.beginPath();lx.moveTo(80,36);lx.lineTo(432,36);lx.stroke();
+    var lt=new THREE.CanvasTexture(lc);
+    var ls=new THREE.Sprite(new THREE.SpriteMaterial({map:lt,transparent:true,opacity:0.6}));
+    ls.scale.set(14,3.5,1);ls.position.y=wd.h+3;wg.add(ls);
+
+    // Store userData for tooltip
+    wallMesh.userData={ruinIdx:wi,label:wd.label,sub:wd.sub};
+
+    ruinsGroup.add(wg);
+  }
+
+  // Floating "dead data" particles -- like ash/embers
+  var ashCount=80;
+  var ashMat=new THREE.MeshBasicMaterial({color:0xff3333,transparent:true,opacity:0.15});
+  for(var ai=0;ai<ashCount;ai++){
+    var ash=new THREE.Mesh(new THREE.BoxGeometry(0.15,0.15,0.15),ashMat.clone());
+    ash.position.set(
+      RUINS_CX+(Math.random()-0.5)*100,
+      2+Math.random()*20,
+      RUINS_CZ+(Math.random()-0.5)*100
+    );
+    ash.userData={ashIdx:ai,baseY:ash.position.y,driftSpeed:0.3+Math.random()*0.5,driftPhase:Math.random()*Math.PI*2};
+    ruinsGroup.add(ash);
+  }
+
+  // Signpost at the entrance to the ruins area
+  var signGroup=new THREE.Group();
+  signGroup.position.set(RUINS_CX-55,0,RUINS_CZ);
+  var signPost=new THREE.Mesh(new THREE.BoxGeometry(0.3,6,0.3),new THREE.MeshStandardMaterial({color:0x442222,roughness:0.9}));
+  signPost.position.y=3;signGroup.add(signPost);
+  var signBoard=new THREE.Mesh(new THREE.BoxGeometry(8,3,0.2),new THREE.MeshStandardMaterial({color:0x1a0808,roughness:0.8,emissive:0x220505,emissiveIntensity:0.08}));
+  signBoard.position.y=5;signGroup.add(signBoard);
+  // Sign text
+  var sc2=document.createElement('canvas');sc2.width=512;sc2.height=192;
+  var sx2=sc2.getContext('2d');
+  sx2.fillStyle='rgba(255,80,80,0.8)';sx2.font='bold 28px Courier New';sx2.textAlign='center';
+  sx2.fillText('THE OLD INTERNET',256,60);
+  sx2.fillStyle='rgba(255,100,100,0.4)';sx2.font='16px Courier New';
+  sx2.fillText('"The internet is dead."',256,100);
+  sx2.fillText('"Long live the internet."',256,130);
+  sx2.fillStyle='rgba(255,80,80,0.25)';sx2.font='12px Courier New';
+  sx2.fillText('\u2014 Gigi',256,160);
+  var st2=new THREE.CanvasTexture(sc2);
+  var ss2=new THREE.Sprite(new THREE.SpriteMaterial({map:st2,transparent:true,opacity:0.8}));
+  ss2.scale.set(10,3.75,1);ss2.position.y=5;signGroup.add(ss2);
+  ruinsGroup.add(signGroup);
+
+  // Dim red point light for the ruins
+  var ruinsLight=new THREE.PointLight(0xff2222,0.5,80);
+  ruinsLight.position.set(RUINS_CX,15,RUINS_CZ);ruinsGroup.add(ruinsLight);
+
+  // Road from frontier to ruins
+  var ruinsRoadPts=[];
+  for(var rr=0;rr<=1;rr+=0.05){
+    var rx=RUINS_CX-55+rr*55;
+    ruinsRoadPts.push(new THREE.Vector3(rx,0.03,RUINS_CZ));
+  }
+  ruinsGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(ruinsRoadPts),
+    new THREE.LineBasicMaterial({color:0x331111,transparent:true,opacity:0.3})));
+  // Second lane
+  var ruinsRoadPts2=[];
+  for(var rr2=0;rr2<=1;rr2+=0.05){
+    var rx2=RUINS_CX-55+rr2*55;
+    ruinsRoadPts2.push(new THREE.Vector3(rx2,0.03,RUINS_CZ+3));
+  }
+  ruinsGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(ruinsRoadPts2),
+    new THREE.LineBasicMaterial({color:0x331111,transparent:true,opacity:0.2})));
+})();
+
+// =====================================================================================
+// TOUCH GRASS -- Easter egg: clickable grass patch near the barn
+// "Touching grass helps too." -- Gigi
+// =====================================================================================
+var grassGroup=new THREE.Group();
+scene.add(grassGroup);
+var grassPatchPos={x:18,z:22}; // near the barn, in a quiet corner
+(function buildGrassPatch(){
+  // A small circular patch of vibrant green grass blades
+  var bladeCount=120;
+  var patchRadius=4;
+  var grassMat=new THREE.MeshBasicMaterial({color:0x33aa44,transparent:true,opacity:0.6,side:THREE.DoubleSide});
+
+  for(var bi=0;bi<bladeCount;bi++){
+    var angle=Math.random()*Math.PI*2;
+    var dist=Math.random()*patchRadius;
+    var bx=Math.cos(angle)*dist;
+    var bz=Math.sin(angle)*dist;
+    var bh=0.6+Math.random()*1.2;
+    var bw=0.08+Math.random()*0.06;
+    var blade=new THREE.Mesh(new THREE.PlaneGeometry(bw,bh),grassMat.clone());
+    blade.material.opacity=0.3+Math.random()*0.4;
+    blade.material.color.setHSL(0.3+Math.random()*0.08,0.6+Math.random()*0.3,0.3+Math.random()*0.15);
+    blade.position.set(bx,bh/2,bz);
+    blade.rotation.y=Math.random()*Math.PI;
+    blade.rotation.z=(Math.random()-0.5)*0.3;
+    blade.userData={grassBlade:true,baseRotZ:blade.rotation.z,swayPhase:Math.random()*Math.PI*2,swaySpeed:1.5+Math.random()*1.5};
+    grassGroup.add(blade);
+  }
+
+  // Soft green glow underneath
+  var glowDisc=new THREE.Mesh(
+    new THREE.CircleGeometry(patchRadius+0.5,16),
+    new THREE.MeshBasicMaterial({color:0x22aa33,transparent:true,opacity:0.06})
+  );
+  glowDisc.rotation.x=-Math.PI/2;glowDisc.position.y=0.02;grassGroup.add(glowDisc);
+
+  // Invisible hit target for clicking
+  var hitDisc=new THREE.Mesh(
+    new THREE.CylinderGeometry(patchRadius+1,patchRadius+1,2,16),
+    new THREE.MeshBasicMaterial({visible:false})
+  );
+  hitDisc.position.y=1;hitDisc.userData={touchGrass:true};grassGroup.add(hitDisc);
+
+  // Small sign
+  var signC=document.createElement('canvas');signC.width=256;signC.height=64;
+  var signCtx=signC.getContext('2d');
+  signCtx.fillStyle='rgba(80,200,100,0.6)';signCtx.font='bold 18px Courier New';signCtx.textAlign='center';
+  signCtx.fillText('TOUCH GRASS',128,28);
+  signCtx.fillStyle='rgba(80,200,100,0.3)';signCtx.font='12px Courier New';
+  signCtx.fillText('click here',128,50);
+  var signTex=new THREE.CanvasTexture(signC);
+  var signSpr=new THREE.Sprite(new THREE.SpriteMaterial({map:signTex,transparent:true,opacity:0.7}));
+  signSpr.scale.set(5,1.25,1);signSpr.position.set(0,3,0);grassGroup.add(signSpr);
+
+  grassGroup.position.set(grassPatchPos.x,0,grassPatchPos.z);
+})();
+
+// Touch Grass overlay logic
+var touchGrassActive=false;
+var touchGrassOverlay=document.getElementById('touch-grass-overlay');
+// Generate CSS grass blades in overlay
+(function(){
+  var bladesDiv=touchGrassOverlay.querySelector('.tg-blades');
+  for(var i=0;i<60;i++){
+    var b=document.createElement('div');b.className='tg-blade';
+    b.style.left=Math.random()*100+'%';
+    b.style.height=(30+Math.random()*80)+'px';
+    b.style.animationDelay=(-Math.random()*3)+'s';
+    b.style.animationDuration=(2.5+Math.random()*2)+'s';
+    b.style.opacity=0.3+Math.random()*0.5;
+    bladesDiv.appendChild(b);
+  }
+})();
+
+function activateTouchGrass(){
+  if(touchGrassActive||insideHouse||modalOpen)return;
+  touchGrassActive=true;
+  // Play peaceful birdsong sound
+  initA();
+  if(actx){
+    // Gentle bird chirps using oscillators
+    var now=actx.currentTime;
+    for(var ci=0;ci<6;ci++){
+      var delay=ci*0.8+Math.random()*0.5;
+      var freq=1800+Math.random()*1200;
+      var osc=actx.createOscillator();osc.type='sine';osc.frequency.value=freq;
+      osc.frequency.linearRampToValueAtTime(freq*0.7,now+delay+0.15);
+      var g=actx.createGain();g.gain.setValueAtTime(0,now+delay);
+      g.gain.linearRampToValueAtTime(0.04,now+delay+0.05);
+      g.gain.exponentialRampToValueAtTime(0.001,now+delay+0.3);
+      osc.connect(g);g.connect(actx.destination);
+      osc.start(now+delay);osc.stop(now+delay+0.35);
+    }
+    // Soft wind noise
+    var windBuf=actx.createBuffer(1,actx.sampleRate*3,actx.sampleRate);
+    var wd=windBuf.getChannelData(0);
+    for(var wi=0;wi<wd.length;wi++)wd[wi]=(Math.random()*2-1)*0.015*Math.sin(wi/wd.length*Math.PI);
+    var windSrc=actx.createBufferSource();windSrc.buffer=windBuf;
+    var wf=actx.createBiquadFilter();wf.type='lowpass';wf.frequency.value=400;
+    windSrc.connect(wf);wf.connect(actx.destination);windSrc.start(now);
+  }
+  // Show overlay
+  touchGrassOverlay.style.display='flex';
+  requestAnimationFrame(function(){touchGrassOverlay.classList.add('v');});
+}
+// Click overlay to dismiss
+touchGrassOverlay.addEventListener('click',function(){
+  if(!touchGrassActive)return;
+  touchGrassOverlay.classList.add('fade-out');
+  setTimeout(function(){
+    touchGrassOverlay.classList.remove('v','fade-out');
+    touchGrassOverlay.style.display='none';
+    touchGrassActive=false;
+  },1500);
+});
+// Click grass patch in 3D world
+var grassRc=new THREE.Raycaster();
+window.addEventListener('click',function(e){
+  if(e.target!==renderer.domElement||modalOpen||drMv||insideHouse||touchGrassActive)return;
+  var mx=(e.clientX/(window.innerWidth||1))*2-1;
+  var my=-(e.clientY/(window.innerHeight||1))*2+1;
+  grassRc.setFromCamera(new THREE.Vector2(mx,my),camera);
+  var hits=grassRc.intersectObjects(grassGroup.children,true);
+  for(var i=0;i<hits.length;i++){
+    if(hits[i].object.userData.touchGrass){activateTouchGrass();return;}
+  }
+});
 
 // ═══════════════════════════════════════════════════════════════════════════
 // §24 BUILDING ENTER/EXIT SYSTEM
@@ -5561,7 +5869,9 @@ function anim(){
   var hudSub=document.getElementById('hud-sub');
   if(!insideHouse){
     var riverThreshold=VILLAGE_CX+55; // roughly where river is
-    if(tgt.x>riverThreshold){hudTitle.textContent='NOSTR FRONTIER';hudSub.textContent=isMobile?'tap to interact // hold for details':'the frontier beyond the river // explore the unknown';}
+    var ruinsThreshold=230; // where the digital ruins begin
+    if(tgt.x>ruinsThreshold){hudTitle.textContent='THE OLD INTERNET';hudSub.textContent=isMobile?'the internet is dead // long live the internet':'digital ruins // "the internet is dead. long live the internet." \u2014 gigi';}
+    else if(tgt.x>riverThreshold){hudTitle.textContent='NOSTR FRONTIER';hudSub.textContent=isMobile?'tap to interact // hold for details':'the frontier beyond the river // explore the unknown';}
     else if(tgt.x>60){hudTitle.textContent='NOSTR VILLAGE';hudSub.textContent=isMobile?'tap to enter // hold for preview':'a techno-amish community // click buildings to enter';}
     else{hudTitle.textContent='NOSTR BARN';hudSub.textContent=isMobile?'tap to explore // hold for details':'100 projects // hover + click to explore';}
   }else if(activeBldg){
@@ -5806,6 +6116,23 @@ function anim(){
       applyCatHighlight();
     }
   }
+  // ── Grass blade sway animation ──
+  for(var gbi=0;gbi<grassGroup.children.length;gbi++){
+    var gb=grassGroup.children[gbi];
+    if(gb.userData.grassBlade){
+      gb.rotation.z=gb.userData.baseRotZ+Math.sin(time*gb.userData.swaySpeed+gb.userData.swayPhase)*0.15;
+    }
+  }
+  // ── Ruins ash/ember floating animation ──
+  for(var rai=0;rai<ruinsGroup.children.length;rai++){
+    var ra=ruinsGroup.children[rai];
+    if(ra.userData.ashIdx!==undefined){
+      ra.position.y=ra.userData.baseY+Math.sin(time*ra.userData.driftSpeed+ra.userData.driftPhase)*2;
+      ra.rotation.x+=dt*0.5;ra.rotation.z+=dt*0.3;
+      ra.material.opacity=0.08+0.08*Math.sin(time*0.8+ra.userData.driftPhase);
+    }
+  }
+
   renderer.render(scene,camera);
 }
 anim();
