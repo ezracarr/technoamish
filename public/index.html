@@ -286,6 +286,22 @@ canvas{display:block;width:100%!important;height:100%!important;position:relativ
 #cw-post-login-hint{font-size:10px;color:rgba(0,255,200,.35);letter-spacing:1px;font-family:'Courier New',monospace;text-align:center;margin-top:12px;display:none}
 #cw-post-login-hint.v{display:block}
 
+/* ── Shop Visit Button (inside shop buildings) ── */
+#shop-visit-btn{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:250;display:none;
+  text-decoration:none;pointer-events:auto;
+  background:rgba(4,8,16,.88);border:2px solid rgba(255,136,68,.6);color:#ff8844;
+  padding:14px 32px;font-family:'Courier New',monospace;font-size:14px;letter-spacing:3px;
+  text-transform:uppercase;cursor:pointer;border-radius:4px;
+  transition:all .2s;text-align:center;
+  box-shadow:0 0 20px rgba(255,136,68,.12),inset 0 0 20px rgba(255,136,68,.04);
+  animation:shopPulse 3s ease-in-out infinite}
+@keyframes shopPulse{0%,100%{border-color:rgba(255,136,68,.4);box-shadow:0 0 15px rgba(255,136,68,.08)}
+  50%{border-color:rgba(255,136,68,.8);box-shadow:0 0 30px rgba(255,136,68,.2)}}
+#shop-visit-btn:hover{background:rgba(255,136,68,.15);border-color:#ff8844;color:#ffaa66;
+  box-shadow:0 0 35px rgba(255,136,68,.25);animation:none}
+#shop-visit-btn .shop-icon{font-size:16px;margin-right:8px}
+#shop-visit-btn.v{display:block}
+
 /* ── About Modal ── */
 #about-modal{position:fixed;inset:0;z-index:300;display:none;align-items:center;justify-content:center;background:rgba(0,4,8,.88)}
 #about-modal.open{display:flex}
@@ -462,6 +478,9 @@ canvas{display:block;width:100%!important;height:100%!important;position:relativ
   #about-inner .about-section ul li{font-size:11px}
   #about-inner .about-link{font-size:10px;word-break:break-all}
 
+  /* Shop visit button */
+  #shop-visit-btn{bottom:70px;padding:12px 24px;font-size:12px;letter-spacing:2px}
+
   /* Tree zap hint */
   #tree-zap-hint{bottom:30px;font-size:9px}
 }
@@ -515,6 +534,7 @@ canvas{display:block;width:100%!important;height:100%!important;position:relativ
 <div id="note-modal"><div id="note-inner"><button id="note-close">X</button><div id="note-profile"></div><div id="note-content"></div><div id="note-meta"></div></div></div>
 <div id="relay-status">RELAY: connecting...</div>
 <button id="house-exit">ESC to exit</button>
+<a id="shop-visit-btn" href="#" target="_blank" rel="noopener"><span class="shop-icon">&#128722;</span> Visit Store</a>
 <div id="house-label">drag to look around</div>
 <div id="hud"><h1 id="hud-title">NOSTR BARN</h1><p id="hud-sub">100 projects // hover + click to explore</p><div class="st">PROTOCOL: NOSTR | STATUS: ONLINE</div></div>
 <div id="explainer">NOSTR is an open source community driven protocol. Hover over pieces of the barn to see many (but by no means all) of the load bearing projects that make NOSTR work.</div>
@@ -3406,6 +3426,17 @@ var COMMUNITY_WALL_NOTES={
 var CW_PROJECT_PUBKEY='bbf94c83c69f7334ffdaed550a9729b94347d22b050a213336a818c2620d6243';
 var CW_RELAY_LIST=['wss://relay.primal.net','wss://relay.damus.io','wss://nos.lol','wss://relay.nostr.band'];
 
+// ═══════════════════════════════════════════════════════════════
+// Shop Store URLs — maps village index → e-commerce website URL
+// Shops with URLs get a prominent "Visit Store" button inside
+// ═══════════════════════════════════════════════════════════════
+var SHOP_URLS={
+  0:'https://sweetsats.io/',              // Sweet Sats
+  1:'https://seedvault.market',           // Seed Vault Market
+  2:'https://www.takemysats.com/milkweedseed', // JohnnyMilkweed / GMP
+  3:'https://www.snorkel.com',            // Snorkel Hot Tubs
+};
+
 // Village center at (120,0). Main street runs E-W, cross streets N-S.
 // Entrances: clear gap at west (road from barn), north, south, east
 var VILLAGE_CX=120,VILLAGE_CZ=0;
@@ -3598,7 +3629,8 @@ function createBuilding(idx){
   var lc=document.createElement('canvas');lc.width=512;lc.height=64;
   var lctx=lc.getContext('2d');lctx.fillStyle=layout.type==='church'?'#ffcc44':layout.type==='shop'?'#ff8844':'#00cccc';lctx.font='bold 18px Courier New';
   lctx.fillText(npubData.name+"'s "+typeLabel,20,28);
-  lctx.fillStyle='rgba(0,200,200,0.4)';lctx.font='12px Courier New';lctx.fillText('click to enter',20,48);
+  lctx.fillStyle='rgba(0,200,200,0.4)';lctx.font='12px Courier New';
+  lctx.fillText(SHOP_URLS[idx]?'click to enter \u2022 visit store':'click to enter',20,48);
   var ltex=new THREE.CanvasTexture(lc);ltex.minFilter=THREE.LinearFilter;
   var lspr=new THREE.Sprite(new THREE.SpriteMaterial({map:ltex,transparent:true,opacity:0.7}));
   lspr.scale.set(8,1,1);lspr.position.set(0,R+1.5,0);grp.add(lspr);
@@ -3672,6 +3704,55 @@ function createBuilding(idx){
     grp.add(fs);fireSpr.push({sprite:fs,baseX:(Math.random()-0.5)*fpW*0.4,baseY:fpH*0.2,speed:0.8+Math.random(),phase:Math.random()*6});
   }
   var fLight=new THREE.PointLight(0xff6622,0.15,W);fLight.position.set(0,fpH*0.3,D/2-0.5);grp.add(fLight);
+
+  // ── Shop-specific interior decorations ──
+  if(layout.type==='shop'){
+    var shopMat=new THREE.MeshStandardMaterial({color:0x101020,roughness:0.4,metalness:0.3,emissive:0xff6633,emissiveIntensity:0.06,transparent:true,opacity:0.6});
+    var shopEdge=new THREE.LineBasicMaterial({color:0xff8844,transparent:true,opacity:0.3});
+    function shopBox(w,h,d,x,y,z){
+      var g=new THREE.BoxGeometry(w,h,d);var m=new THREE.Mesh(g,shopMat.clone());
+      m.position.set(x,y,z);m.add(new THREE.LineSegments(new THREE.EdgesGeometry(g,15),shopEdge.clone()));grp.add(m);
+    }
+    // Counter / display case across front of shop
+    var ctrW=W*0.6,ctrH=1.1,ctrD=0.8;
+    shopBox(ctrW,ctrH,ctrD, 0,ctrH/2,-D/2+ctrD/2+1.2);
+    // Glass top on counter
+    var glassMat=new THREE.MeshStandardMaterial({color:0x102030,roughness:0.1,metalness:0.6,emissive:0x00aacc,emissiveIntensity:0.04,transparent:true,opacity:0.3});
+    var glassGeo=new THREE.BoxGeometry(ctrW-0.1,0.04,ctrD-0.1);
+    var glassM=new THREE.Mesh(glassGeo,glassMat);
+    glassM.position.set(0,ctrH+0.02,-D/2+ctrD/2+1.2);
+    glassM.add(new THREE.LineSegments(new THREE.EdgesGeometry(glassGeo,15),new THREE.LineBasicMaterial({color:0x00ffcc,transparent:true,opacity:0.15})));
+    grp.add(glassM);
+    // Shelves on right wall
+    var shelfCount=Math.max(2,Math.floor(H/1.5));
+    for(var shi=0;shi<shelfCount;shi++){
+      var shY=1.0+(shi*(H-1.2)/Math.max(1,shelfCount-1));
+      shopBox(0.08,0.08,D*0.6, W/2-0.25,shY,D*0.1);
+      // Small product boxes on shelves
+      for(var pi=0;pi<3;pi++){
+        var pz=D*0.1+(-D*0.2+pi*D*0.2);
+        var pCol=[0xff6633,0xffaa00,0x00ccaa][pi%3];
+        var prodMat=new THREE.MeshStandardMaterial({color:0x101020,emissive:pCol,emissiveIntensity:0.08,transparent:true,opacity:0.5});
+        var prodGeo=new THREE.BoxGeometry(0.2+Math.random()*0.15,0.25+Math.random()*0.15,0.2);
+        var prodM=new THREE.Mesh(prodGeo,prodMat);
+        prodM.position.set(W/2-0.3,shY+0.18,pz);
+        prodM.add(new THREE.LineSegments(new THREE.EdgesGeometry(prodGeo,15),new THREE.LineBasicMaterial({color:pCol,transparent:true,opacity:0.2})));
+        grp.add(prodM);
+      }
+    }
+    // "OPEN" sign hanging from ceiling near front
+    var signC=document.createElement('canvas');signC.width=256;signC.height=64;
+    var sctx=signC.getContext('2d');
+    sctx.fillStyle='rgba(8,10,20,0.9)';sctx.fillRect(0,0,256,64);
+    sctx.strokeStyle='rgba(255,136,68,0.5)';sctx.lineWidth=2;sctx.strokeRect(4,4,248,56);
+    sctx.fillStyle='#ff8844';sctx.font='bold 28px Courier New';sctx.textAlign='center';
+    sctx.fillText('OPEN',128,42);
+    var signTex=new THREE.CanvasTexture(signC);signTex.minFilter=THREE.LinearFilter;
+    var signSpr=new THREE.Sprite(new THREE.SpriteMaterial({map:signTex,transparent:true,opacity:0.8}));
+    signSpr.scale.set(2.5,0.6,1);signSpr.position.set(0,H-0.3,-D/2+0.5);grp.add(signSpr);
+    // Warm accent light for shop interior
+    var shopLight=new THREE.PointLight(0xff8844,0.12,W*1.5);shopLight.position.set(0,H*0.7,0);grp.add(shopLight);
+  }
 
   scene.add(grp);
 
@@ -3749,9 +3830,13 @@ function createBuilding(idx){
               try{var p=JSON.parse(m[2].content);profileCache[bldg.hex]={name:p.name||p.display_name||'',picture:p.picture||''};
                 if(p.picture)loadProfileImg(bldg.hex,p.picture);
                 bldg.lctx.clearRect(0,0,512,64);bldg.lctx.fillStyle='#00cccc';bldg.lctx.font='bold 18px Courier New';
-                bldg.lctx.fillText((p.name||bldg.npubData.name)+"'s Place",20,28);
+                var bldgLayout=BLDG_LAYOUTS[bldg.villageIdx];
+                var lblSuffix=bldgLayout&&bldgLayout.type==='shop'?"'s Shop":"'s Place";
+                bldg.lctx.fillStyle=bldgLayout&&bldgLayout.type==='shop'?'#ff8844':'#00cccc';
+                bldg.lctx.fillText((p.name||bldg.npubData.name)+lblSuffix,20,28);
                 bldg.lctx.fillStyle='rgba(0,200,200,0.4)';bldg.lctx.font='12px Courier New';
-                bldg.lctx.fillText(bldg.notes.length+' notes',20,48);bldg.ltex.needsUpdate=true;
+                var lblNote=SHOP_URLS[bldg.villageIdx]?bldg.notes.length+' notes \u2022 visit store':bldg.notes.length+' notes';
+                bldg.lctx.fillText(lblNote,20,48);bldg.ltex.needsUpdate=true;
               }catch(pe){}
             }
           }
@@ -4952,6 +5037,7 @@ setTimeout(fetchFrontierZaps,4000);
 var activeBldg=null;
 var houseExitBtn=document.getElementById('house-exit');
 var houseLabelEl=document.getElementById('house-label');
+var shopVisitBtn=document.getElementById('shop-visit-btn');
 var savedCamPos=new THREE.Vector3();var savedCamTarget=new THREE.Vector3();
 var camTransition=0,camTransDir=0;
 var camFromPos=new THREE.Vector3(),camToPos=new THREE.Vector3();
@@ -4971,10 +5057,21 @@ function enterBuilding(bldg){
   for(var i=0;i<bldg.wallMeshes.length;i++)bldg.wallMeshes[i].visible=true;
   houseExitBtn.classList.add('v');houseLabelEl.classList.add('v');
   var hasCW=!!COMMUNITY_WALL_NOTES[bldg.villageIdx];
+  var shopUrl=SHOP_URLS[bldg.villageIdx];
+  // Show shop visit button if this is a shop with a URL
+  if(shopUrl){
+    shopVisitBtn.href=shopUrl;
+    var shopName=(bldg.npubData&&bldg.npubData.name)||'Store';
+    shopVisitBtn.innerHTML='<span class="shop-icon">&#128722;</span> Visit '+shopName;
+    shopVisitBtn.classList.add('v');
+  }else{
+    shopVisitBtn.classList.remove('v');
+  }
   if(isMobile){
     houseLabelEl.textContent=hasCW?'tap walls to read \u2022 tap community wall to post':'tap walls to read notes';
   }else{
-    houseLabelEl.textContent=hasCW?'drag to look \u2022 click wall to read \u2022 click community wall to post':'drag to look \u2022 click note to read';
+    var shopHint=shopUrl?' \u2022 visit store below':'';
+    houseLabelEl.textContent=hasCW?'drag to look \u2022 click wall to read \u2022 click community wall to post'+shopHint:'drag to look \u2022 click note to read'+shopHint;
   }
 }
 function exitBuilding(){
@@ -4984,6 +5081,7 @@ function exitBuilding(){
   // Hide wall notes
   for(var i=0;i<activeBldg.wallMeshes.length;i++)activeBldg.wallMeshes[i].visible=xray;
   houseExitBtn.classList.remove('v');houseLabelEl.classList.remove('v');
+  shopVisitBtn.classList.remove('v');
 }
 houseExitBtn.addEventListener('click',function(e){e.stopPropagation();exitBuilding();});
 window.addEventListener('keydown',function(e){
