@@ -286,6 +286,39 @@ canvas{display:block;width:100%!important;height:100%!important;position:relativ
 #cw-post-login-hint{font-size:10px;color:rgba(0,255,200,.35);letter-spacing:1px;font-family:'Courier New',monospace;text-align:center;margin-top:12px;display:none}
 #cw-post-login-hint.v{display:block}
 
+/* ── About Modal ── */
+#about-modal{position:fixed;inset:0;z-index:300;display:none;align-items:center;justify-content:center;background:rgba(0,4,8,.88)}
+#about-modal.open{display:flex}
+#about-inner{max-width:620px;width:92%;max-height:85vh;background:rgba(8,12,24,.96);border:1px solid rgba(0,255,255,.4);
+  border-radius:6px;padding:32px 36px;position:relative;overflow-y:auto;
+  box-shadow:0 0 60px rgba(0,255,255,.12)}
+#about-close{position:absolute;top:12px;right:14px;background:none;border:1px solid rgba(0,255,255,.3);
+  color:#0ff;font-size:16px;cursor:pointer;width:28px;height:28px;display:flex;align-items:center;justify-content:center;
+  font-family:monospace;transition:all .15s}
+#about-close:hover{border-color:#0ff;background:rgba(0,255,255,.1)}
+#about-inner h2{font-size:20px;letter-spacing:4px;color:#0ff;margin:0 0 6px;text-transform:uppercase;font-family:'Courier New',monospace;text-align:center}
+#about-inner .about-icon{font-size:42px;display:block;text-align:center;margin-bottom:6px}
+#about-inner .about-tagline{font-size:12px;color:rgba(0,255,255,.45);text-align:center;letter-spacing:2px;margin-bottom:20px;font-family:'Courier New',monospace}
+#about-inner .about-section{margin-bottom:18px}
+#about-inner .about-section h3{font-size:12px;letter-spacing:3px;color:#0ff;text-transform:uppercase;margin:0 0 8px;font-family:'Courier New',monospace;
+  border-bottom:1px solid rgba(0,255,255,.12);padding-bottom:6px}
+#about-inner .about-section p{font-size:13px;color:rgba(200,240,240,.6);line-height:1.7;margin:0 0 8px;font-family:'Courier New',monospace;letter-spacing:0.3px}
+#about-inner .about-section ul{list-style:none;padding:0;margin:0}
+#about-inner .about-section ul li{font-size:12px;color:rgba(200,240,240,.55);line-height:1.8;padding:2px 0;font-family:'Courier New',monospace;letter-spacing:0.3px}
+#about-inner .about-section ul li::before{content:'\25B8 ';color:#0ff;margin-right:6px}
+#about-inner .about-link{display:inline-block;color:#0ff;text-decoration:none;border-bottom:1px solid rgba(0,255,255,.3);
+  transition:all .15s;font-family:'Courier New',monospace;letter-spacing:0.5px}
+#about-inner .about-link:hover{color:#fff;border-color:#0ff;text-shadow:0 0 8px rgba(0,255,255,.4)}
+#about-inner .about-cta{text-align:center;margin-top:24px;padding-top:18px;border-top:1px solid rgba(0,255,255,.12)}
+#about-inner .about-cta p{font-size:12px;color:rgba(0,255,255,.4);letter-spacing:1px;font-family:'Courier New',monospace;line-height:1.7}
+#about-inner .about-cta .cta-btn{display:inline-block;margin-top:10px;background:rgba(0,255,255,.08);border:1px solid rgba(0,255,255,.4);
+  color:#0ff;padding:10px 24px;font-family:'Courier New',monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;
+  cursor:pointer;border-radius:4px;transition:all .2s;text-decoration:none}
+#about-inner .about-cta .cta-btn:hover{background:rgba(0,255,255,.18);border-color:#0ff;box-shadow:0 0 12px rgba(0,255,255,.15)}
+#about-inner .about-footer{text-align:center;margin-top:16px;font-size:10px;color:rgba(0,255,255,.25);letter-spacing:1px;font-family:'Courier New',monospace}
+#about-inner .about-footer a{color:rgba(0,255,255,.35);text-decoration:none;border-bottom:1px solid rgba(0,255,255,.15);transition:all .15s}
+#about-inner .about-footer a:hover{color:#0ff;border-color:rgba(0,255,255,.4)}
+
 /* ══════════════════════════════════════════════════════════════════════
    MOBILE / TOUCH RESPONSIVE STYLES
    ══════════════════════════════════════════════════════════════════════ */
@@ -419,6 +452,16 @@ canvas{display:block;width:100%!important;height:100%!important;position:relativ
   #dlw-inner .dlw-body{font-size:12px;line-height:1.7}
   #dlw-inner .dlw-hint{font-size:10px}
 
+  /* About modal */
+  #about-inner{width:94%;padding:22px 18px;max-height:85vh}
+  #about-inner h2{font-size:16px;letter-spacing:3px}
+  #about-inner .about-icon{font-size:32px}
+  #about-inner .about-tagline{font-size:10px}
+  #about-inner .about-section h3{font-size:11px}
+  #about-inner .about-section p{font-size:12px}
+  #about-inner .about-section ul li{font-size:11px}
+  #about-inner .about-link{font-size:10px;word-break:break-all}
+
   /* Tree zap hint */
   #tree-zap-hint{bottom:30px;font-size:9px}
 }
@@ -489,13 +532,14 @@ canvas{display:block;width:100%!important;height:100%!important;position:relativ
   </div>
 </div>
 <div id="ctrls">
-  <button id="btn" class="tb">Deconstruct</button>
-  <button id="xbtn" class="tb">X-Ray</button>
   <button id="fbtn" class="tb">Features</button>
+  <button id="about-btn" class="tb">About</button>
   <div id="slbl"></div>
 </div>
 <div id="fpanel">
   <h3>Feature toggles</h3>
+  <div class="ft" data-f="decon"><span class="key">D</span><label>Deconstruct</label><div class="tog" id="f-decon"></div></div>
+  <div class="ft" data-f="xray"><span class="key">X</span><label>X-Ray</label><div class="tog" id="f-xray"></div></div>
   <div class="ft" data-f="zap"><span class="key">Z</span><label>Zap bolts</label><div class="tog" id="f-zap"></div></div>
   <div class="ft" data-f="hb"><span class="key">H</span><label>Heartbeat</label><div class="tog" id="f-hb"></div></div>
   <div class="ft" data-f="search"><span class="key">/</span><label>Search</label><div class="tog" id="f-search"></div></div>
@@ -591,6 +635,52 @@ canvas{display:block;width:100%!important;height:100%!important;position:relativ
     <button id="cw-post-btn" disabled>Post to Wall</button>
     <div id="cw-post-status"></div>
     <div id="cw-post-login-hint">&#128273; Log in with Nostr to post on the community wall</div>
+  </div>
+</div>
+
+<!-- About Modal -->
+<div id="about-modal">
+  <div id="about-inner">
+    <button id="about-close">X</button>
+    <span class="about-icon">&#127807;&#9889;</span>
+    <h2>Techno-Amish Village</h2>
+    <div class="about-tagline">A 3D Interactive Guide to the Nostr Ecosystem</div>
+
+    <div class="about-section">
+      <h3>What Is This?</h3>
+      <p>Techno-Amish Village is an open-source, interactive 3D experience built to showcase the <strong style="color:#0ff">Nostr protocol</strong> and its vibrant ecosystem. The barn is built from over 100 real open-source projects that make Nostr work &mdash; hover over the timbers to discover them, and click to visit their repositories.</p>
+      <p>The village is home to prominent Nostr community members, each with their own building. It&rsquo;s a living space powered by real relay data, meant to educate, inspire, and celebrate the decentralized future.</p>
+    </div>
+
+    <div class="about-section">
+      <h3>What Can You Do?</h3>
+      <ul>
+        <li><strong style="color:rgba(0,255,255,.8)">Explore the barn</strong> &mdash; Each piece represents a real Nostr project. Hover for details, click to visit the repo.</li>
+        <li><strong style="color:rgba(0,255,255,.8)">Enter a house</strong> &mdash; Click any village building to step inside and see that person&rsquo;s recent Nostr posts on the walls.</li>
+        <li><strong style="color:rgba(0,255,255,.8)">Leave a note</strong> &mdash; Log in with Nostr and write on a building&rsquo;s community wall for others to read.</li>
+        <li><strong style="color:rgba(0,255,255,.8)">Watch live data</strong> &mdash; Ground radar cells, river fish, and the GM Garden are all driven by live relay feeds.</li>
+        <li><strong style="color:rgba(0,255,255,.8)">Zap the tree</strong> &mdash; Send sats to grow the village&rsquo;s community pine tree.</li>
+        <li><strong style="color:rgba(0,255,255,.8)">Toggle features</strong> &mdash; Open the Features panel to enable fireflies, sunrise, proverbs, banjo music, web-of-trust lines, and more.</li>
+        <li><strong style="color:rgba(0,255,255,.8)">Deconstruct the barn</strong> &mdash; Watch the barn disassemble piece by piece, revealing every project that holds it together.</li>
+      </ul>
+    </div>
+
+    <div class="about-section">
+      <h3>Follow Techno-Amish on Nostr</h3>
+      <p>Stay updated and connect with the project:<br>
+        <a class="about-link" href="https://njump.me/npub1h0u5eq7xnaenfl76a42s49efh9p5053tq59zzvek4qvvycsdvfpsp8mycv" target="_blank" rel="noopener">npub1h0u5eq7xnaenfl76a42s49efh9p5053tq59zzvek4qvvycsdvfpsp8mycv</a>
+      </p>
+    </div>
+
+    <div class="about-cta">
+      <p>Techno-Amish Village is <strong style="color:#0ff">open source</strong> under the MIT License.<br>
+      We welcome contributions, ideas, and pull requests!</p>
+      <a class="cta-btn" href="https://github.com/ezracarr/technoamish" target="_blank" rel="noopener">&#128736; View Source &amp; Contribute</a>
+    </div>
+
+    <div class="about-footer">
+      <a href="https://shakespeare.diy" target="_blank" rel="noopener">Vibed with Shakespeare</a>
+    </div>
   </div>
 </div>
 
@@ -1761,19 +1851,25 @@ scene.add(bug);
 
 // §11 CAMERA & CONTROLS (Animation state, Deconstruct/X-Ray, Orbit)
 var bS="built",aP=0,AD=5,NS=6;
-var btn=document.getElementById('btn'),slbl=document.getElementById('slbl');
+var slbl=document.getElementById('slbl');
 var tf=document.getElementById('tf'),thm=document.getElementById('thm');
 var tl=document.getElementById('tl'),tc=document.getElementById('tc');
-var xbtn=document.getElementById('xbtn');
 var bellDone=false;
 
-btn.addEventListener('click',function(){
+// Deconstruct toggle function (called from feature system)
+function onToggleDeconstruct(){
   initA();
-  if(bS==="built"){bS="deconstructing";aP=0;btn.textContent="Barn Raising";btn.classList.add("on");slbl.style.opacity='1';bellDone=false;thm.classList.remove('v');tl.classList.remove('v');tc.classList.remove('v');}
-  else if(bS==="deconstructed"){bS="constructing";aP=0;btn.textContent="Deconstruct";btn.classList.remove("on");slbl.style.opacity='1';bellDone=false;thm.classList.add('v');tl.classList.add('v');tc.classList.add('v');}
-});
-xbtn.addEventListener('click',function(){
-  xray=!xray;intG.visible=xray;xbtn.textContent=xray?"Solid":"X-Ray";xbtn.classList.toggle("on",xray);
+  if(FT.decon){
+    // Turning on: deconstruct if built
+    if(bS==="built"){bS="deconstructing";aP=0;slbl.style.opacity='1';bellDone=false;thm.classList.remove('v');tl.classList.remove('v');tc.classList.remove('v');}
+  }else{
+    // Turning off: reconstruct if deconstructed
+    if(bS==="deconstructed"){bS="constructing";aP=0;slbl.style.opacity='1';bellDone=false;thm.classList.add('v');tl.classList.add('v');tc.classList.add('v');}
+  }
+}
+// X-Ray toggle function (called from feature system)
+function onToggleXray(){
+  xray=FT.xray;intG.visible=xray;
   for(var j=0;j<allP.length;j++){if(allP[j].s===1||allP[j].s===3){allP[j].mt.transparent=xray;allP[j].mt.opacity=xray?0.15:1;allP[j].mt.needsUpdate=true;}}
   for(var j=0;j<decor.length;j++){decor[j].material.transparent=true;decor[j].material.opacity=xray?0.08:1;decor[j].material.needsUpdate=true;}
   // X-ray all village buildings
@@ -1781,18 +1877,16 @@ xbtn.addEventListener('click',function(){
     var vb=village[vi];
     for(var ci=0;ci<vb.clickMeshes.length;ci++){
       var cm=vb.clickMeshes[ci];
-      // Skip invisible hit-zone boxes (they have villageIdx userData and start at opacity 0)
       if(cm.userData.villageIdx!==undefined)continue;
       cm.material.transparent=true;
       cm.material.opacity=xray?0.08:1;
       cm.material.needsUpdate=true;
     }
-    // Show interior wall notes when x-ray is on
     for(var wi=0;wi<vb.wallMeshes.length;wi++){
       vb.wallMeshes[wi].visible=xray;
     }
   }
-});
+}
 
 function ease(t){return t<0.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;}
 
@@ -2073,13 +2167,26 @@ window.addEventListener('click',function(e){if(e.target!==renderer.domElement||d
 // ═══════════════════════════════════════════════════════════════════════════
 // FEATURE SYSTEM – 11 toggleable features
 // ═══════════════════════════════════════════════════════════════
-var FT={zap:false,hb:false,search:false,sun:false,prv:false,ff:false,qc:false,wot:false,gdn:true,rc:false,exp:false,insp:false,banjo:false};
-var ftMap={zap:'f-zap',hb:'f-hb',search:'f-search',sun:'f-sun',prv:'f-prv',ff:'f-ff',qc:'f-qc',wot:'f-wot',gdn:'f-gdn',rc:'f-rc',exp:'f-exp',insp:'f-insp',banjo:'f-banjo'};
+var FT={decon:false,xray:false,zap:false,hb:false,search:false,sun:false,prv:false,ff:false,qc:false,wot:false,gdn:true,rc:false,exp:false,insp:false,banjo:false};
+var ftMap={decon:'f-decon',xray:'f-xray',zap:'f-zap',hb:'f-hb',search:'f-search',sun:'f-sun',prv:'f-prv',ff:'f-ff',qc:'f-qc',wot:'f-wot',gdn:'f-gdn',rc:'f-rc',exp:'f-exp',insp:'f-insp',banjo:'f-banjo'};
 document.getElementById('fbtn').addEventListener('click',function(){document.getElementById('fpanel').classList.toggle('open');});
+// About modal
+(function(){
+  var aboutBtn=document.getElementById('about-btn');
+  var aboutModal=document.getElementById('about-modal');
+  var aboutClose=document.getElementById('about-close');
+  if(aboutBtn&&aboutModal){
+    aboutBtn.addEventListener('click',function(){aboutModal.classList.add('open');});
+    aboutClose.addEventListener('click',function(){aboutModal.classList.remove('open');});
+    aboutModal.addEventListener('click',function(e){if(e.target===aboutModal)aboutModal.classList.remove('open');});
+  }
+})();
 
 function applyFeat(key){
   var el=document.getElementById(ftMap[key]);
   if(el){if(FT[key])el.classList.add('on');else el.classList.remove('on');}
+  if(key==='decon')onToggleDeconstruct();
+  if(key==='xray')onToggleXray();
   if(key==='zap')onToggleZap();
   if(key==='ff')onToggleFireflies();
   if(key==='prv')onToggleProverbs();
@@ -2104,7 +2211,7 @@ for(var ri=0;ri<ftRows.length;ri++){(function(row){
 })(ftRows[ri]);}
 window.addEventListener('keydown',function(e){
   if(e.target.tagName==='INPUT')return;
-  var km={z:'zap',h:'hb',s:'sun',p:'prv',f:'ff',q:'qc',w:'wot',g:'gdn',r:'rc',e:'exp',i:'insp',b:'banjo'};
+  var km={d:'decon',x:'xray',z:'zap',h:'hb',s:'sun',p:'prv',f:'ff',q:'qc',w:'wot',g:'gdn',r:'rc',e:'exp',i:'insp',b:'banjo'};
   var key=null;
   if(e.key==='/')key='search';
   else if(km[e.key])key=km[e.key];
@@ -5579,6 +5686,9 @@ function anim(){
     slbl.style.color=bS==="constructing"?"#0ff":"#f60";
     if(aP>=1){
       var fs2=bS==="deconstructing"?"deconstructed":"built";bS=fs2;slbl.style.opacity='0';
+      // Sync feature toggle state with animation result
+      FT.decon=(fs2==="deconstructed");
+      var deconEl=document.getElementById(ftMap.decon);if(deconEl){if(FT.decon)deconEl.classList.add('on');else deconEl.classList.remove('on');}
       for(var j=0;j<allP.length;j++){var p=allP[j];var fp2=fs2==="deconstructed"?p.pp:p.bp;var fr2=fs2==="deconstructed"?p.pr:p.br;p.m.position.copy(fp2);p.m.rotation.copy(fr2);}
       for(var j=0;j<decor.length;j++)decor[j].visible=fs2==="built";
       if(fs2==="built"&&!bellDone){bellDone=true;bell();setTimeout(function(){thm.classList.remove('v');tl.classList.remove('v');tc.classList.remove('v');},2500);}

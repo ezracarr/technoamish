@@ -149,12 +149,57 @@ Exact shortcuts are listed in the in-file feature panel and TOC.
 
 ---
 
-## License and credits
+## Contributing
 
-If the original author specified a license elsewhere, follow that. The inline comments describe the work as a community-facing Nostr visualization; repository metadata may be added over time.
+Pull requests are welcome! Whether it's adding new barn projects, assigning village buildings to new community members, fixing bugs, or adding features — we'd love your help. See the [Customization tips](#customization-tips) section above for guidance on common changes.
+
+To get started:
+1. Fork the repository
+2. Make your changes
+3. Open a pull request at [github.com/ezracarr/technoamish](https://github.com/ezracarr/technoamish)
+
+---
+
+## Follow Techno-Amish on Nostr
+
+Stay connected with the project:
+
+**npub:** `npub1h0u5eq7xnaenfl76a42s49efh9p5053tq59zzvek4qvvycsdvfpsp8mycv`
+
+---
+
+## License
+
+This project is licensed under the **MIT License**.
+
+```
+MIT License
+
+Copyright (c) 2025 Techno-Amish / ezracarr
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
 
 ---
 
 ## Summary
 
 **Technoamish** is a **static, single-page 3D experience** that teaches and demonstrates the Nostr ecosystem through a stylized barn, a pubkey-mapped village, and live relay data—all inside **`nostr-barn-tron.html`**, served like any other static site.
+
+[![Edit with Shakespeare](https://shakespeare.diy/badge.svg)](https://shakespeare.diy/clone?url=https%3A%2F%2Fgithub.com%2Fezracarr%2Ftechnoamish)
