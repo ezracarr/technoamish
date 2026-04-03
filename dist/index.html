@@ -120,6 +120,34 @@ canvas{display:block;width:100%!important;height:100%!important;position:relativ
   background:rgba(4,8,16,.7);border:1px solid rgba(0,255,255,.2);border-radius:6px;
   animation:explainerFade 10s ease-in forwards}
 @keyframes explainerFade{0%,60%{opacity:1}100%{opacity:0;visibility:hidden}}
+
+/* ── Deep Link Welcome Overlay ── */
+#deeplink-welcome{position:fixed;inset:0;z-index:280;display:none;align-items:center;justify-content:center;
+  background:rgba(2,4,10,.82);pointer-events:auto;cursor:pointer;
+  animation:dlWelcomeFadeIn .8s ease-out}
+#deeplink-welcome.v{display:flex}
+@keyframes dlWelcomeFadeIn{from{opacity:0}to{opacity:1}}
+#dlw-inner{max-width:520px;width:90%;background:rgba(6,10,22,.96);
+  border:1px solid rgba(0,255,200,.35);border-radius:8px;padding:32px 36px;
+  box-shadow:0 0 60px rgba(0,255,200,.08),0 0 120px rgba(0,255,200,.03);
+  position:relative;text-align:center}
+#dlw-inner .dlw-icon{font-size:36px;margin-bottom:8px;display:block}
+#dlw-inner h2{font-size:18px;letter-spacing:4px;color:#00ffcc;margin:0 0 6px;
+  text-transform:uppercase;font-family:'Courier New',monospace;line-height:1.4}
+#dlw-inner .dlw-name{color:#0ff;font-weight:bold;font-size:20px;letter-spacing:2px}
+#dlw-inner .dlw-body{font-size:13px;color:rgba(0,255,200,.6);line-height:1.8;
+  margin:16px 0 20px;font-family:'Courier New',monospace;letter-spacing:0.3px}
+#dlw-inner .dlw-body strong{color:rgba(0,255,200,.85);font-weight:bold}
+#dlw-inner .dlw-hint{font-size:11px;color:rgba(0,255,200,.3);letter-spacing:2px;
+  text-transform:uppercase;font-family:'Courier New',monospace;
+  border-top:1px solid rgba(0,255,200,.1);padding-top:16px;margin-top:4px}
+#dlw-inner .dlw-dismiss{display:inline-block;margin-top:16px;background:rgba(0,255,200,.08);
+  border:1px solid rgba(0,255,200,.4);color:#00ffcc;padding:10px 28px;
+  font-family:'Courier New',monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;
+  cursor:pointer;border-radius:4px;transition:all .2s}
+#dlw-inner .dlw-dismiss:hover{background:rgba(0,255,200,.18);border-color:#00ffcc;
+  box-shadow:0 0 12px rgba(0,255,200,.15)}
+
 #house-exit{position:fixed;top:130px;right:16px;z-index:250;display:none;
   background:rgba(4,8,16,.85);border:1px solid rgba(0,255,255,.3);color:#0ff;padding:8px 18px;
   font-family:'Courier New',monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;
@@ -266,6 +294,19 @@ canvas{display:block;width:100%!important;height:100%!important;position:relativ
 <div id="house-label">drag to look around</div>
 <div id="hud"><h1 id="hud-title">NOSTR BARN</h1><p id="hud-sub">100 projects // hover + click to explore</p><div class="st">PROTOCOL: NOSTR | STATUS: ONLINE</div></div>
 <div id="explainer">NOSTR is an open source community driven protocol. Hover over pieces of the barn to see many (but by no means all) of the load bearing projects that make NOSTR work.</div>
+
+<!-- Deep Link Welcome Overlay -->
+<div id="deeplink-welcome">
+  <div id="dlw-inner">
+    <span class="dlw-icon">&#127807;</span>
+    <h2>Welcome to the<br>Techno-Amish Village</h2>
+    <p class="dlw-body" id="dlw-body">
+      This is a 3D Nostr village where prominent community members each have a place of their own.
+    </p>
+    <div class="dlw-hint">click anywhere or press any key to continue</div>
+    <button class="dlw-dismiss" id="dlw-dismiss">Enter</button>
+  </div>
+</div>
 <div id="ctrls">
   <button id="btn" class="tb">Deconstruct</button>
   <button id="xbtn" class="tb">X-Ray</button>
@@ -4663,6 +4704,7 @@ function findVillageBuildingByDeepLink(raw){
   }
   return null;
 }
+var deepLinkActive=false;
 function tryDeepLinkEnterBuilding(){
   var key=deepLinkNpubRaw();
   if(!key){console.log('[DeepLink] no deep link key found in URL');return;}
@@ -4670,11 +4712,48 @@ function tryDeepLinkEnterBuilding(){
   var b=findVillageBuildingByDeepLink(key);
   if(b){
     console.log('[DeepLink] found building, entering...');
+    deepLinkActive=true;
+    // Hide the default explainer
+    var explainer=document.getElementById('explainer');
+    if(explainer){explainer.style.display='none';}
+    // Enter the building
     enterBuilding(b);
+    // Show the deep link welcome overlay
+    var ownerName=(b.npubData&&b.npubData.name)?b.npubData.name:'this Nostr user';
+    var hasCW=!!COMMUNITY_WALL_NOTES[b.villageIdx];
+    var dlwBody=document.getElementById('dlw-body');
+    dlwBody.innerHTML=
+      "You've arrived at <strong>"+ownerName+"'s place</strong> in the Techno-Amish Village &mdash; "+
+      "a 3D world built on the <strong>Nostr</strong> protocol where prominent community members each have a home of their own."+
+      "<br><br>"+
+      "Their <strong>recent notes</strong> are displayed on the walls around you."+
+      (hasCW?" Click the <strong>community wall</strong> to leave them a note if you'd like.":"")+
+      "<br><br>"+
+      "Press <strong>ESC</strong> or click the exit button to step outside and explore the rest of the village &mdash; "+
+      "a barn made of 100 open-source projects, a river of trending notes, and more.";
+    var dlw=document.getElementById('deeplink-welcome');
+    // Small delay so the camera transition starts first
+    setTimeout(function(){dlw.classList.add('v');},600);
   }else{
     console.log('[DeepLink] building not found for key: '+key);
   }
 }
+
+// ── Deep link welcome dismiss ──
+(function(){
+  var dlw=document.getElementById('deeplink-welcome');
+  var dlwDismiss=document.getElementById('dlw-dismiss');
+  function dismissWelcome(){
+    if(!dlw.classList.contains('v'))return;
+    dlw.style.transition='opacity .5s';dlw.style.opacity='0';
+    setTimeout(function(){dlw.classList.remove('v');dlw.style.opacity='';dlw.style.transition='';deepLinkActive=false;},500);
+  }
+  dlwDismiss.addEventListener('click',function(e){e.stopPropagation();dismissWelcome();});
+  dlw.addEventListener('click',function(e){if(e.target===dlw)dismissWelcome();});
+  window.addEventListener('keydown',function(e){
+    if(dlw.classList.contains('v')&&e.key!=='Escape'){dismissWelcome();e.stopPropagation();}
+  });
+})();
 
 // ═══════════════════════════════════════════════════════════════════════════
 // §25 RENDER LOOP
