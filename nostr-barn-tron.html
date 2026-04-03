@@ -5085,8 +5085,9 @@ setTimeout(fetchFrontierZaps,4000);
 var ruinsGroup=new THREE.Group();
 scene.add(ruinsGroup);
 (function buildDigitalRuins(){
-  // Place ruins far beyond the frontier lots, past the river on the far side
-  var RUINS_CX=260,RUINS_CZ=0;
+  console.log('[TechnoAmish] Building Digital Ruins');
+  // Place ruins beyond the frontier lots, past the river
+  var RUINS_CX=230,RUINS_CZ=0;
 
   // Extend ground plane to cover ruins area
   var ruinsGnd=new THREE.Mesh(
@@ -5179,31 +5180,37 @@ scene.add(ruinsGroup);
     ruinsGroup.add(ash);
   }
 
-  // Signpost at the entrance to the ruins area
+  // Signpost at the entrance to the ruins area — tall and visible from frontier
   var signGroup=new THREE.Group();
-  signGroup.position.set(RUINS_CX-55,0,RUINS_CZ);
-  var signPost=new THREE.Mesh(new THREE.BoxGeometry(0.3,6,0.3),new THREE.MeshStandardMaterial({color:0x442222,roughness:0.9}));
-  signPost.position.y=3;signGroup.add(signPost);
-  var signBoard=new THREE.Mesh(new THREE.BoxGeometry(8,3,0.2),new THREE.MeshStandardMaterial({color:0x1a0808,roughness:0.8,emissive:0x220505,emissiveIntensity:0.08}));
-  signBoard.position.y=5;signGroup.add(signBoard);
-  // Sign text
+  signGroup.position.set(RUINS_CX-40,0,RUINS_CZ);
+  var signPost=new THREE.Mesh(new THREE.BoxGeometry(0.4,10,0.4),new THREE.MeshStandardMaterial({color:0x552222,roughness:0.9,emissive:0x331111,emissiveIntensity:0.1}));
+  signPost.position.y=5;signGroup.add(signPost);
+  var signBoard=new THREE.Mesh(new THREE.BoxGeometry(12,4,0.2),new THREE.MeshStandardMaterial({color:0x1a0808,roughness:0.8,emissive:0x440808,emissiveIntensity:0.15}));
+  signBoard.position.y=8;signGroup.add(signBoard);
+  // Sign text — large and bold
   var sc2=document.createElement('canvas');sc2.width=512;sc2.height=192;
   var sx2=sc2.getContext('2d');
-  sx2.fillStyle='rgba(255,80,80,0.8)';sx2.font='bold 28px Courier New';sx2.textAlign='center';
-  sx2.fillText('THE OLD INTERNET',256,60);
-  sx2.fillStyle='rgba(255,100,100,0.4)';sx2.font='16px Courier New';
+  sx2.fillStyle='rgba(255,80,80,0.9)';sx2.font='bold 32px Courier New';sx2.textAlign='center';
+  sx2.fillText('THE OLD INTERNET',256,55);
+  sx2.fillStyle='rgba(255,100,100,0.5)';sx2.font='18px Courier New';
   sx2.fillText('"The internet is dead."',256,100);
   sx2.fillText('"Long live the internet."',256,130);
-  sx2.fillStyle='rgba(255,80,80,0.25)';sx2.font='12px Courier New';
-  sx2.fillText('\u2014 Gigi',256,160);
+  sx2.fillStyle='rgba(255,80,80,0.35)';sx2.font='14px Courier New';
+  sx2.fillText('\u2014 Gigi',256,165);
   var st2=new THREE.CanvasTexture(sc2);
-  var ss2=new THREE.Sprite(new THREE.SpriteMaterial({map:st2,transparent:true,opacity:0.8}));
-  ss2.scale.set(10,3.75,1);ss2.position.y=5;signGroup.add(ss2);
+  var ss2=new THREE.Sprite(new THREE.SpriteMaterial({map:st2,transparent:true,opacity:0.9}));
+  ss2.scale.set(16,6,1);ss2.position.y=8;signGroup.add(ss2);
+  // Red beacon light on the sign
+  var signLight=new THREE.PointLight(0xff3333,0.8,30);
+  signLight.position.set(0,10,0);signGroup.add(signLight);
   ruinsGroup.add(signGroup);
 
-  // Dim red point light for the ruins
-  var ruinsLight=new THREE.PointLight(0xff2222,0.5,80);
-  ruinsLight.position.set(RUINS_CX,15,RUINS_CZ);ruinsGroup.add(ruinsLight);
+  // Red point light for the ruins — visible from the frontier
+  var ruinsLight=new THREE.PointLight(0xff2222,1.2,120);
+  ruinsLight.position.set(RUINS_CX,20,RUINS_CZ);ruinsGroup.add(ruinsLight);
+  // Additional ground-level glow
+  var ruinsLight2=new THREE.PointLight(0xff4422,0.6,60);
+  ruinsLight2.position.set(RUINS_CX,3,RUINS_CZ);ruinsGroup.add(ruinsLight2);
 
   // Road from frontier to ruins
   var ruinsRoadPts=[];
@@ -5229,23 +5236,24 @@ scene.add(ruinsGroup);
 // =====================================================================================
 var grassGroup=new THREE.Group();
 scene.add(grassGroup);
-var grassPatchPos={x:18,z:22}; // near the barn, in a quiet corner
+var grassPatchPos={x:30,z:-18}; // visible from default camera between barn and village
 (function buildGrassPatch(){
-  // A small circular patch of vibrant green grass blades
-  var bladeCount=120;
-  var patchRadius=4;
-  var grassMat=new THREE.MeshBasicMaterial({color:0x33aa44,transparent:true,opacity:0.6,side:THREE.DoubleSide});
+  console.log('[TechnoAmish] Building Touch Grass patch at',grassPatchPos.x,grassPatchPos.z);
+  // A circular patch of vibrant green grass blades — bigger and brighter
+  var bladeCount=200;
+  var patchRadius=6;
+  var grassMat=new THREE.MeshBasicMaterial({color:0x33aa44,transparent:true,opacity:0.7,side:THREE.DoubleSide});
 
   for(var bi=0;bi<bladeCount;bi++){
     var angle=Math.random()*Math.PI*2;
     var dist=Math.random()*patchRadius;
     var bx=Math.cos(angle)*dist;
     var bz=Math.sin(angle)*dist;
-    var bh=0.6+Math.random()*1.2;
-    var bw=0.08+Math.random()*0.06;
+    var bh=1.0+Math.random()*2.0;
+    var bw=0.12+Math.random()*0.1;
     var blade=new THREE.Mesh(new THREE.PlaneGeometry(bw,bh),grassMat.clone());
-    blade.material.opacity=0.3+Math.random()*0.4;
-    blade.material.color.setHSL(0.3+Math.random()*0.08,0.6+Math.random()*0.3,0.3+Math.random()*0.15);
+    blade.material.opacity=0.5+Math.random()*0.4;
+    blade.material.color.setHSL(0.28+Math.random()*0.1,0.7+Math.random()*0.25,0.35+Math.random()*0.2);
     blade.position.set(bx,bh/2,bz);
     blade.rotation.y=Math.random()*Math.PI;
     blade.rotation.z=(Math.random()-0.5)*0.3;
@@ -5253,30 +5261,34 @@ var grassPatchPos={x:18,z:22}; // near the barn, in a quiet corner
     grassGroup.add(blade);
   }
 
-  // Soft green glow underneath
+  // Bright green glow underneath
   var glowDisc=new THREE.Mesh(
-    new THREE.CircleGeometry(patchRadius+0.5,16),
-    new THREE.MeshBasicMaterial({color:0x22aa33,transparent:true,opacity:0.06})
+    new THREE.CircleGeometry(patchRadius+1,16),
+    new THREE.MeshBasicMaterial({color:0x22cc44,transparent:true,opacity:0.12})
   );
   glowDisc.rotation.x=-Math.PI/2;glowDisc.position.y=0.02;grassGroup.add(glowDisc);
 
+  // Green point light to make it stand out
+  var grassLight=new THREE.PointLight(0x44ff66,0.8,20);
+  grassLight.position.set(0,4,0);grassGroup.add(grassLight);
+
   // Invisible hit target for clicking
   var hitDisc=new THREE.Mesh(
-    new THREE.CylinderGeometry(patchRadius+1,patchRadius+1,2,16),
+    new THREE.CylinderGeometry(patchRadius+2,patchRadius+2,3,16),
     new THREE.MeshBasicMaterial({visible:false})
   );
-  hitDisc.position.y=1;hitDisc.userData={touchGrass:true};grassGroup.add(hitDisc);
+  hitDisc.position.y=1.5;hitDisc.userData={touchGrass:true};grassGroup.add(hitDisc);
 
-  // Small sign
-  var signC=document.createElement('canvas');signC.width=256;signC.height=64;
+  // Prominent sign — larger and brighter
+  var signC=document.createElement('canvas');signC.width=512;signC.height=128;
   var signCtx=signC.getContext('2d');
-  signCtx.fillStyle='rgba(80,200,100,0.6)';signCtx.font='bold 18px Courier New';signCtx.textAlign='center';
-  signCtx.fillText('TOUCH GRASS',128,28);
-  signCtx.fillStyle='rgba(80,200,100,0.3)';signCtx.font='12px Courier New';
-  signCtx.fillText('click here',128,50);
+  signCtx.fillStyle='rgba(80,255,120,0.85)';signCtx.font='bold 36px Courier New';signCtx.textAlign='center';
+  signCtx.fillText('TOUCH GRASS',256,50);
+  signCtx.fillStyle='rgba(80,255,120,0.5)';signCtx.font='20px Courier New';
+  signCtx.fillText('\u25BC click here \u25BC',256,90);
   var signTex=new THREE.CanvasTexture(signC);
-  var signSpr=new THREE.Sprite(new THREE.SpriteMaterial({map:signTex,transparent:true,opacity:0.7}));
-  signSpr.scale.set(5,1.25,1);signSpr.position.set(0,3,0);grassGroup.add(signSpr);
+  var signSpr=new THREE.Sprite(new THREE.SpriteMaterial({map:signTex,transparent:true,opacity:0.85}));
+  signSpr.scale.set(10,2.5,1);signSpr.position.set(0,5,0);grassGroup.add(signSpr);
 
   grassGroup.position.set(grassPatchPos.x,0,grassPatchPos.z);
 })();
@@ -5869,7 +5881,7 @@ function anim(){
   var hudSub=document.getElementById('hud-sub');
   if(!insideHouse){
     var riverThreshold=VILLAGE_CX+55; // roughly where river is
-    var ruinsThreshold=230; // where the digital ruins begin
+    var ruinsThreshold=210; // where the digital ruins begin
     if(tgt.x>ruinsThreshold){hudTitle.textContent='THE OLD INTERNET';hudSub.textContent=isMobile?'the internet is dead // long live the internet':'digital ruins // "the internet is dead. long live the internet." \u2014 gigi';}
     else if(tgt.x>riverThreshold){hudTitle.textContent='NOSTR FRONTIER';hudSub.textContent=isMobile?'tap to interact // hold for details':'the frontier beyond the river // explore the unknown';}
     else if(tgt.x>60){hudTitle.textContent='NOSTR VILLAGE';hudSub.textContent=isMobile?'tap to enter // hold for preview':'a techno-amish community // click buildings to enter';}
