@@ -2,12 +2,12 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>The Nostr Barn</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#080818;overflow:hidden;font-family:'Courier New',monospace;width:100vw;height:100vh}
-canvas{display:block;width:100%!important;height:100%!important;position:relative;z-index:1}
+canvas{display:block;width:100%!important;height:100%!important;position:relative;z-index:1;touch-action:none}
 #tooltip{position:fixed;pointer-events:none;padding:12px 18px;border-radius:2px;font-size:13px;max-width:360px;opacity:0;transition:opacity .12s;z-index:100;line-height:1.5;
   background:rgba(0,8,16,.92);border:1px solid rgba(0,255,255,.6);
   box-shadow:0 0 25px rgba(0,255,255,.2),inset 0 0 30px rgba(0,255,255,.04)}
@@ -285,6 +285,179 @@ canvas{display:block;width:100%!important;height:100%!important;position:relativ
 #cw-post-status{font-size:10px;color:rgba(255,170,0,.5);margin-top:12px;letter-spacing:1px;font-family:'Courier New',monospace;min-height:14px;text-align:center}
 #cw-post-login-hint{font-size:10px;color:rgba(0,255,200,.35);letter-spacing:1px;font-family:'Courier New',monospace;text-align:center;margin-top:12px;display:none}
 #cw-post-login-hint.v{display:block}
+
+/* ══════════════════════════════════════════════════════════════════════
+   MOBILE / TOUCH RESPONSIVE STYLES
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* ── Touch devices: disable hover effects ── */
+@media (hover:none){
+  #tooltip{display:none!important}
+  .leg:hover{color:rgba(255,255,255,.35);background:transparent}
+  .tb:hover{background:transparent;border-color:rgba(0,255,255,.5)}
+  .tb.on:hover{background:transparent}
+  .nav-btn:hover{background:rgba(0,30,40,.9);border-color:rgba(0,255,255,.5);color:#0ff}
+  .nav-btn:active{background:rgba(0,255,255,.25);border-color:#0ff;color:#fff}
+  .login-option:hover{border-color:rgba(0,255,255,.15);background:rgba(0,255,255,.02);box-shadow:none}
+  .login-option:active{border-color:rgba(0,255,255,.5);background:rgba(0,255,255,.06)}
+  #nostr-login-btn:hover{background:rgba(4,8,16,.85);border-color:rgba(0,255,255,.5);box-shadow:none}
+  #nostr-login-btn:active{background:rgba(0,255,255,.12);border-color:#0ff}
+  #house-exit:hover{background:rgba(4,8,16,.85);border-color:rgba(0,255,255,.3);animation:exitPulse 3s ease-in-out infinite}
+  #house-exit:active{background:rgba(0,255,255,.15);border-color:#0ff}
+  #note-close:hover,#login-close:hover,#zap-tree-close:hover,#cw-post-close:hover{background:transparent;border-color:inherit}
+  #tree-zap-hint{display:none!important}
+}
+
+/* ── Small screens (phones) ── */
+@media (max-width:768px){
+  /* HUD — shrink and reposition */
+  #hud{top:10px;left:10px}
+  #hud h1{font-size:14px;letter-spacing:4px}
+  #hud p{font-size:9px;margin-top:3px}
+  #hud .st{font-size:8px}
+
+  /* Controls — top right, smaller */
+  #ctrls{top:8px;right:8px;gap:4px}
+  .tb{padding:6px 10px;font-size:9px;letter-spacing:1px}
+
+  /* Feature panel — full width overlay on mobile */
+  #fpanel{top:auto;bottom:0;left:0;right:0;width:100%;max-width:100%;max-height:50vh;
+    border-radius:8px 8px 0 0;border:1px solid rgba(0,255,255,.3);
+    padding:14px 16px 20px;z-index:250}
+  #fpanel h3{margin-bottom:8px}
+  .ft .key{display:none}
+  .ft label{font-size:11px}
+  .ft .tog{width:32px;height:16px}
+  .ft .tog::after{width:12px;height:12px}
+  .ft .tog.on::after{transform:translateX(16px)}
+
+  /* Login area — move to bottom-left, smaller */
+  #nostr-login-area{top:auto;bottom:100px;left:10px;transform:none;z-index:75}
+  #nostr-login-btn{padding:6px 12px;font-size:9px;letter-spacing:1px}
+  #nostr-login-btn .key-icon{font-size:12px}
+  #nostr-user-info{padding:4px 10px;gap:6px}
+  #nostr-user-info img{width:22px;height:22px}
+  #nostr-user-info .user-name{font-size:9px;max-width:80px}
+  #nostr-user-info .user-pk{display:none}
+  #nostr-logout-btn{padding:3px 8px;font-size:8px}
+
+  /* Nav pad — smaller, bottom right */
+  #nav-pad{bottom:10px;right:8px;padding:6px 8px;gap:3px}
+  #nav-pad .nr{gap:3px}
+  .nav-btn{width:34px;height:34px;font-size:16px}
+  #nav-hint{display:none}
+
+  /* Legend — hide or compact */
+  #legend{bottom:6px;left:6px;gap:3px;max-width:55%;overflow:hidden;flex-wrap:nowrap}
+  .leg{font-size:7px;padding:2px 4px;letter-spacing:0.5px}
+  .leg span{width:7px;height:2px}
+
+  /* Sat counter */
+  #sat-counter{top:65px;left:10px;font-size:11px}
+
+  /* Zap log — smaller */
+  #zap-log{top:85px;left:10px;width:260px;max-height:40vh}
+
+  /* Search box */
+  #search-box{bottom:120px;right:8px}
+  #search-box input{width:180px;font-size:11px;padding:6px 10px}
+
+  /* House exit button — more prominent, larger tap target */
+  #house-exit{top:60px;right:8px;padding:10px 20px;font-size:13px;z-index:260}
+
+  /* House label */
+  #house-label{bottom:50px;left:10px;font-size:8px;max-width:60%}
+
+  /* Explainer — smaller */
+  #explainer{max-width:85%;padding:14px 18px;font-size:13px;line-height:1.5}
+
+  /* Relay status */
+  #relay-status{bottom:6px;right:8px;font-size:8px}
+
+  /* Thermometer / progress */
+  #thm{right:8px;bottom:50px;width:24px;height:120px}
+  #tc{right:10px;bottom:32px;font-size:9px}
+  #tl{display:none}
+
+  /* Proverb bar */
+  #proverb-bar{bottom:28px;height:14px}
+  #proverb-text{font-size:9px}
+
+  /* Explorer panel — full width */
+  #explorer{width:100%;top:50px;height:calc(100vh - 50px);padding:12px}
+
+  /* Note modal — more padding at edges */
+  #note-inner{width:94%;padding:18px 16px;max-height:85vh}
+  #note-content{font-size:13px;line-height:1.6}
+  #note-profile img{width:36px;height:36px}
+  #note-profile .np-name{font-size:12px}
+  #note-profile .np-pk{font-size:9px}
+  #note-meta{font-size:10px}
+
+  /* Login modal */
+  #login-inner{width:94%;padding:20px 18px}
+  #login-inner h2{font-size:14px;letter-spacing:2px}
+  .login-option{padding:12px 14px;gap:10px}
+  .login-option .lo-icon{font-size:18px;width:26px}
+  .login-option .lo-title{font-size:11px}
+  .login-option .lo-desc{font-size:9px}
+
+  /* Zap modal */
+  #zap-tree-inner{width:94%;padding:20px 18px}
+  #zap-tree-inner h2{font-size:14px}
+  .zap-amount-row{gap:6px}
+  .zap-amt-btn{padding:8px 12px;font-size:12px;min-width:50px}
+
+  /* Community wall post modal */
+  #cw-post-inner{width:94%;padding:20px 18px}
+  #cw-post-inner h2{font-size:14px;letter-spacing:2px}
+  #cw-post-textarea{height:100px;font-size:12px;padding:12px}
+
+  /* Deep link welcome */
+  #dlw-inner{width:92%;padding:24px 20px}
+  #dlw-inner h2{font-size:15px;letter-spacing:3px}
+  #dlw-inner .dlw-body{font-size:12px;line-height:1.7}
+  #dlw-inner .dlw-hint{font-size:10px}
+
+  /* Tree zap hint */
+  #tree-zap-hint{bottom:30px;font-size:9px}
+}
+
+/* ── Mobile info bar (replaces tooltip on touch devices) ── */
+#mobile-info-bar button:active{background:rgba(0,255,255,.25)!important;border-color:#0ff!important}
+
+/* ── Very small screens (small phones) ── */
+@media (max-width:400px){
+  #hud h1{font-size:12px;letter-spacing:3px}
+  #hud p{font-size:8px}
+  .tb{padding:5px 8px;font-size:8px}
+  #nostr-login-area{bottom:90px}
+  #nostr-login-btn{padding:5px 10px;font-size:8px}
+  .nav-btn{width:30px;height:30px;font-size:14px}
+  #legend{display:none}
+  #house-exit{padding:8px 16px;font-size:12px}
+  #explainer{max-width:92%;padding:12px 14px;font-size:12px}
+  #dlw-inner{padding:18px 16px}
+  #dlw-inner h2{font-size:13px}
+  #dlw-inner .dlw-body{font-size:11px}
+}
+
+/* ── Landscape phones ── */
+@media (max-height:500px) and (max-width:900px){
+  #hud{top:6px;left:8px}
+  #hud h1{font-size:12px}
+  #hud p,.hud .st{font-size:8px}
+  #ctrls{top:6px;right:6px}
+  .tb{padding:4px 8px;font-size:8px}
+  #fpanel{max-height:60vh}
+  #nostr-login-area{bottom:auto;top:6px;left:auto;right:120px;transform:none}
+  #nav-pad{bottom:6px;right:6px}
+  .nav-btn{width:28px;height:28px;font-size:13px}
+  #legend{display:none}
+  #house-exit{top:40px}
+  #explainer{max-width:70%;padding:10px 14px;font-size:12px}
+  #house-label{bottom:30px}
+}
 </style>
 </head>
 <body>
@@ -303,7 +476,7 @@ canvas{display:block;width:100%!important;height:100%!important;position:relativ
     <p class="dlw-body" id="dlw-body">
       This is a 3D Nostr village where prominent community members each have a place of their own.
     </p>
-    <div class="dlw-hint">click anywhere or press any key to continue</div>
+    <div class="dlw-hint">tap anywhere or press any key to continue</div>
     <button class="dlw-dismiss" id="dlw-dismiss">Enter</button>
   </div>
 </div>
@@ -1640,6 +1813,38 @@ window.addEventListener('pointermove',function(e){
 });
 renderer.domElement.addEventListener('wheel',function(e){if(!insideHouse){rad=Math.max(10,Math.min(150,rad+e.deltaY*0.12));uC();}},{passive:true});
 
+// ── Pinch-to-zoom for touch devices ──
+var pinchDist=0;
+renderer.domElement.addEventListener('touchstart',function(e){
+  if(e.touches.length===2){
+    var dx=e.touches[0].clientX-e.touches[1].clientX;
+    var dy=e.touches[0].clientY-e.touches[1].clientY;
+    pinchDist=Math.sqrt(dx*dx+dy*dy);
+  }
+},{passive:true});
+renderer.domElement.addEventListener('touchmove',function(e){
+  if(e.touches.length===2&&!insideHouse){
+    var dx=e.touches[0].clientX-e.touches[1].clientX;
+    var dy=e.touches[0].clientY-e.touches[1].clientY;
+    var newDist=Math.sqrt(dx*dx+dy*dy);
+    if(pinchDist>0){
+      var delta=(pinchDist-newDist)*0.3;
+      rad=Math.max(10,Math.min(150,rad+delta));uC();
+    }
+    pinchDist=newDist;
+    e.preventDefault();
+  }
+},{passive:false});
+renderer.domElement.addEventListener('touchend',function(){pinchDist=0;},{passive:true});
+
+// ── Mobile detection ──
+var isMobile=(function(){return 'ontouchstart' in window||navigator.maxTouchPoints>0||(window.innerWidth||800)<768;})();
+// Update explainer text for mobile
+if(isMobile){
+  var explainerEl=document.getElementById('explainer');
+  if(explainerEl)explainerEl.textContent='NOSTR is an open source community driven protocol. Tap on pieces of the barn to see many (but by no means all) of the load bearing projects that make NOSTR work.';
+}
+
 function updateFPCam(){
   var lx=Math.sin(fpYaw)*Math.cos(fpPitch);
   var ly=Math.sin(fpPitch);
@@ -1678,8 +1883,18 @@ for(var ni=0;ni<navBtns.length;ni++){(function(btn){
   btn.addEventListener('pointerdown',function(e){e.preventDefault();e.stopPropagation();navKeys[dir]=true;});
   btn.addEventListener('pointerup',function(e){e.stopPropagation();navKeys[dir]=false;});
   btn.addEventListener('pointerleave',function(){navKeys[dir]=false;});
+  btn.addEventListener('pointercancel',function(){navKeys[dir]=false;});
   btn.addEventListener('click',function(e){e.stopPropagation();});
 })(navBtns[ni]);}
+// Safety: release all nav keys on any touch end (mobile reliability)
+window.addEventListener('touchend',function(){
+  setTimeout(function(){
+    if(!document.querySelector('.nav-btn:active')){
+      navKeys.fwd=navKeys.back=navKeys.left=navKeys.right=false;
+      zoomDir=0;
+    }
+  },100);
+},{passive:true});
 var navPad=document.getElementById('nav-pad');
 navPad.addEventListener('click',function(e){e.stopPropagation();});
 // Zoom buttons
@@ -1748,8 +1963,37 @@ window.addEventListener('pointermove',function(e){
   var repo=REPOS[idx];if(!repo){tt.style.opacity='0';return;}ttC.textContent=repo.cat;ttC.style.color=CI[repo.cat]||"#0ff";ttN.textContent=repo.name;ttD.textContent=repo.desc;tt.style.opacity='1';tt.style.left=Math.min(e.clientX+15,(window.innerWidth||800)-380)+'px';tt.style.top=Math.min(e.clientY+15,(window.innerHeight||600)-120)+'px';renderer.domElement.style.cursor='pointer';tooltipLocked=false;}}}
   else{if(!tooltipLocked){tt.style.opacity='0';renderer.domElement.style.cursor='default';}}
 });
+// ── Barn part tap/click — on mobile: first tap shows info bar, second tap opens URL ──
+var mobileInfoBar=null;
+var mobileInfoIdx=-1;
+var mobileInfoTimer=null;
+function showMobileInfoBar(repo,idx){
+  if(!mobileInfoBar){
+    mobileInfoBar=document.createElement('div');
+    mobileInfoBar.id='mobile-info-bar';
+    mobileInfoBar.style.cssText='position:fixed;bottom:0;left:0;right:0;z-index:150;background:rgba(4,8,16,.96);border-top:1px solid rgba(0,255,255,.5);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;font-family:"Courier New",monospace;transition:transform .25s;transform:translateY(100%)';
+    document.body.appendChild(mobileInfoBar);
+  }
+  var catColor=CI[repo.cat]||'#0ff';
+  mobileInfoBar.innerHTML='<div style="flex:1;min-width:0"><div style="font-size:8px;text-transform:uppercase;letter-spacing:2px;color:'+catColor+';margin-bottom:3px">'+repo.cat+'</div><div style="font-size:13px;color:#fff;font-weight:bold;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+repo.name+'</div><div style="font-size:10px;color:rgba(0,255,255,.5);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+repo.desc+'</div></div><button style="flex-shrink:0;background:rgba(0,255,255,.1);border:1px solid rgba(0,255,255,.5);color:#0ff;padding:8px 16px;font-family:\'Courier New\',monospace;font-size:10px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;border-radius:3px;white-space:nowrap" id="mib-open">Open repo</button>';
+  mobileInfoBar.style.transform='translateY(0)';
+  mobileInfoIdx=idx;
+  document.getElementById('mib-open').onclick=function(){window.open(repo.url,'_blank');};
+  clearTimeout(mobileInfoTimer);
+  mobileInfoTimer=setTimeout(function(){hideMobileInfoBar();},8000);
+}
+function hideMobileInfoBar(){
+  if(mobileInfoBar)mobileInfoBar.style.transform='translateY(100%)';
+  mobileInfoIdx=-1;clearTimeout(mobileInfoTimer);
+}
 window.addEventListener('click',function(e){if(e.target!==renderer.domElement||drMv||insideHouse)return;ms.x=(e.clientX/(window.innerWidth||1))*2-1;ms.y=-(e.clientY/(window.innerHeight||1))*2+1;rc.setFromCamera(ms,camera);var hits=rc.intersectObjects(allP.map(function(p){return p.m}));
-  if(hits.length>0){var idx=hits[0].object.userData.pi;if(idx!==undefined&&REPOS[idx])window.open(REPOS[idx].url,'_blank');}});
+  if(hits.length>0){var idx=hits[0].object.userData.pi;if(idx!==undefined&&REPOS[idx]){
+    if(isMobile){
+      if(mobileInfoIdx===idx){window.open(REPOS[idx].url,'_blank');hideMobileInfoBar();}
+      else{showMobileInfoBar(REPOS[idx],idx);}
+    }else{window.open(REPOS[idx].url,'_blank');}
+  }}else{if(isMobile)hideMobileInfoBar();}
+});
 
 // ═══════════════════════════════════════════════════════════════
 // ═══════════════════════════════════════════════════════════════════════════
@@ -4550,7 +4794,11 @@ function enterBuilding(bldg){
   for(var i=0;i<bldg.wallMeshes.length;i++)bldg.wallMeshes[i].visible=true;
   houseExitBtn.classList.add('v');houseLabelEl.classList.add('v');
   var hasCW=!!COMMUNITY_WALL_NOTES[bldg.villageIdx];
-  houseLabelEl.textContent=hasCW?'drag to look \u2022 click wall to read \u2022 click community wall to post':'drag to look \u2022 click note to read';
+  if(isMobile){
+    houseLabelEl.textContent=hasCW?'tap walls to read \u2022 tap community wall to post':'tap walls to read notes';
+  }else{
+    houseLabelEl.textContent=hasCW?'drag to look \u2022 click wall to read \u2022 click community wall to post':'drag to look \u2022 click note to read';
+  }
 }
 function exitBuilding(){
   if(!insideHouse||camTransDir!==0||!activeBldg)return;
@@ -4726,14 +4974,16 @@ function tryDeepLinkEnterBuilding(){
     var ownerName=(b.npubData&&b.npubData.name)?b.npubData.name:'this Nostr user';
     var hasCW=!!COMMUNITY_WALL_NOTES[b.villageIdx];
     var dlwBody=document.getElementById('dlw-body');
+    var tapOrClick=isMobile?'Tap':'Click';
+    var exitInstr=isMobile?'Tap the <strong>exit button</strong> above':'Press <strong>ESC</strong> or click the exit button';
     dlwBody.innerHTML=
       "You've arrived at <strong>"+ownerName+"'s place</strong> in the Techno-Amish Village &mdash; "+
       "a 3D world built on the <strong>Nostr</strong> protocol where prominent community members each have a home of their own."+
       "<br><br>"+
       "Their <strong>recent notes</strong> are displayed on the walls around you."+
-      (hasCW?" Click the <strong>community wall</strong> to leave them a note if you'd like.":"")+
+      (hasCW?" "+tapOrClick+" the <strong>community wall</strong> to leave them a note if you'd like.":"")+
       "<br><br>"+
-      "Press <strong>ESC</strong> or click the exit button to step outside and explore the rest of the village &mdash; "+
+      exitInstr+" to step outside and explore the rest of the village &mdash; "+
       "a barn made of 100 open-source projects, a river of trending notes, and more.";
     var dlw=document.getElementById('deeplink-welcome');
     // Small delay so the camera transition starts first
@@ -4870,13 +5120,13 @@ function anim(){
   var hudSub=document.getElementById('hud-sub');
   if(!insideHouse){
     var riverThreshold=VILLAGE_CX+55; // roughly where river is
-    if(tgt.x>riverThreshold){hudTitle.textContent='NOSTR FRONTIER';hudSub.textContent='the frontier beyond the river // explore the unknown';}
-    else if(tgt.x>60){hudTitle.textContent='NOSTR VILLAGE';hudSub.textContent='a techno-amish community // click buildings to enter';}
-    else{hudTitle.textContent='NOSTR BARN';hudSub.textContent='100 projects // hover + click to explore';}
+    if(tgt.x>riverThreshold){hudTitle.textContent='NOSTR FRONTIER';hudSub.textContent=isMobile?'tap to explore':'the frontier beyond the river // explore the unknown';}
+    else if(tgt.x>60){hudTitle.textContent='NOSTR VILLAGE';hudSub.textContent=isMobile?'tap buildings to enter':'a techno-amish community // click buildings to enter';}
+    else{hudTitle.textContent='NOSTR BARN';hudSub.textContent=isMobile?'tap to explore // pinch to zoom':'100 projects // hover + click to explore';}
   }else if(activeBldg){
     var bn=activeBldg.npubData?activeBldg.npubData.name:'';
     hudTitle.textContent=bn?bn.toUpperCase()+"'S PLACE":'INSIDE';
-    hudSub.textContent='drag to look // click notes to read // ESC to exit';
+    hudSub.textContent=isMobile?'drag to look // tap walls // exit button above':'drag to look // click notes to read // ESC to exit';
   }
 
   // Tree growth animation
