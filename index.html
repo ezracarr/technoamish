@@ -6230,6 +6230,54 @@ setTimeout(function(){tryDeepLinkEnterBuilding();},500);
 window.addEventListener('resize',function(){var w=window.innerWidth||800,h=window.innerHeight||600;camera.aspect=w/h;camera.updateProjectionMatrix();renderer.setSize(w,h);});
 
 // ═══════════════════════════════════════════════════════════════════════════
+// §27a SECP256K1 — Minimal pubkey derivation from privkey (for nsec login)
+//      Computes compressed x-only pubkey = privkey * G  (Schnorr / BIP-340)
+// ═══════════════════════════════════════════════════════════════════════════
+var secp256k1=(function(){
+  // Field prime p and curve order n
+  var P=BigInt('0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F');
+  var N=BigInt('0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141');
+  var Gx=BigInt('0x79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798');
+  var Gy=BigInt('0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8');
+  function mod(a,m){var r=a%m;return r<0n?r+m:r;}
+  function inv(a,m){
+    var t=0n,nt=1n,r=m,nr=mod(a,m);
+    while(nr!==0n){var q=r/nr;var tmp=t;t=nt;nt=tmp-q*nt;tmp=r;r=nr;nr=tmp-q*nr;}
+    return mod(t,m);
+  }
+  // Point addition (Jacobian would be faster but this is fine for one-off derivation)
+  function add(x1,y1,x2,y2){
+    if(x1===null)return[x2,y2];if(x2===null)return[x1,y1];
+    if(x1===x2&&y1===y2){
+      var s=mod(3n*x1*x1*inv(2n*y1,P),P);
+      var rx=mod(s*s-2n*x1,P);return[rx,mod(s*(x1-rx)-y1,P)];
+    }
+    if(x1===x2)return[null,null];
+    var s=mod((y2-y1)*inv(x2-x1,P),P);
+    var rx=mod(s*s-x1-x2,P);return[rx,mod(s*(x1-rx)-y1,P)];
+  }
+  // Scalar multiplication via double-and-add
+  function mul(k,px,py){
+    var rx=null,ry=null,qx=px,qy=py;k=mod(k,N);
+    while(k>0n){
+      if(k&1n){var r=add(rx,ry,qx,qy);rx=r[0];ry=r[1];}
+      var d=add(qx,qy,qx,qy);qx=d[0];qy=d[1];k>>=1n;
+    }
+    return[rx,ry];
+  }
+  return{
+    getPublicKey:function(hexPriv){
+      var k=BigInt('0x'+hexPriv);
+      if(k<=0n||k>=N)return null;
+      var pt=mul(k,Gx,Gy);
+      if(pt[0]===null)return null;
+      var xHex=pt[0].toString(16).padStart(64,'0');
+      return xHex;
+    }
+  };
+})();
+
+// ═══════════════════════════════════════════════════════════════════════════
 // §27 NOSTR LOGIN — NIP-07 (browser ext), NIP-46 (remote signer), nsec
 // ═══════════════════════════════════════════════════════════════════════════
 var nostrUser={pubkey:null,name:null,picture:null,signer:null}; // signer: 'nip07'|'nsec'|null
@@ -6287,24 +6335,48 @@ document.getElementById('bunker-connect-btn').addEventListener('click',function(
 
 // ── nsec Login ──
 var nsecRow=document.getElementById('nsec-input-row');
+var nsecWarningAccepted=false;
 document.getElementById('login-nsec').addEventListener('click',function(){
   nsecRow.style.display=nsecRow.style.display==='flex'?'none':'flex';
-  if(nsecRow.style.display==='flex')document.getElementById('nsec-input').focus();
+  if(nsecRow.style.display==='flex'){
+    document.getElementById('nsec-input').focus();
+    if(!nsecWarningAccepted){
+      loginStatus.innerHTML='<span style="color:#f80">\u26A0 WARNING:</span> <span style="color:rgba(255,170,80,.7)">Pasting your nsec in a browser is risky. Your private key could be exposed to browser extensions, XSS attacks, or clipboard sniffers. A NIP-07 signer (Alby, nos2x, Amber) is strongly recommended.</span>';
+    }
+  }
 });
 document.getElementById('nsec-login-btn').addEventListener('click',function(){
   var nsecVal=document.getElementById('nsec-input').value.trim();
   if(!nsecVal.startsWith('nsec1')){loginStatus.textContent='Invalid nsec. Must start with nsec1...';return;}
-  // Decode nsec (bech32) to hex private key
-  var hexPriv=npubToHex(nsecVal); // reuse the bech32 decoder — works for nsec too
-  if(!hexPriv||hexPriv.length!==64){loginStatus.textContent='Could not decode nsec. Check the key and try again.';return;}
-  nsecPrivkey=hexPriv;
-  // Derive pubkey from privkey using secp256k1 (simplified — we'll compute it)
-  // For this single-file app, we'll use a minimal pubkey derivation
-  loginStatus.textContent='nsec login is not fully secure in-browser. For signing zaps, please use a NIP-07 extension.';
-  // We can still get the pubkey via a relay lookup, or compute it
-  // For now, set as logged in with limited capability
-  loginStatus.textContent='For security, please use a NIP-07 extension (Alby, nos2x) instead. nsec login is not supported for zapping.';
+  // If not yet accepted warning, show confirmation
+  if(!nsecWarningAccepted){
+    loginStatus.innerHTML='<span style="color:#f80">\u26A0 YOUR KEY, YOUR RESPONSIBILITY.</span><br><span style="color:rgba(255,170,80,.6)">Your nsec will be held in memory only and never stored or transmitted (except to sign events). It is cleared on page refresh. Proceed?</span><br><button id="nsec-accept-btn" style="margin-top:10px;background:rgba(255,100,0,.15);border:1px solid rgba(255,100,0,.6);color:#f80;padding:8px 18px;font-family:\'Courier New\',monospace;font-size:11px;cursor:pointer;border-radius:3px;letter-spacing:1px">I UNDERSTAND, LOG ME IN</button>';
+    document.getElementById('nsec-accept-btn').addEventListener('click',function(){
+      nsecWarningAccepted=true;
+      doNsecLogin(nsecVal);
+    });
+    return;
+  }
+  doNsecLogin(nsecVal);
 });
+
+function doNsecLogin(nsecVal){
+  loginStatus.textContent='Decoding nsec and deriving pubkey...';
+  var hexPriv=npubToHex(nsecVal); // bech32 decoder works for nsec too
+  if(!hexPriv||hexPriv.length!==64){loginStatus.textContent='Could not decode nsec. Check the key and try again.';return;}
+  // Derive x-only pubkey from privkey
+  var pubkey;
+  try{pubkey=secp256k1.getPublicKey(hexPriv);}catch(e){pubkey=null;}
+  if(!pubkey||pubkey.length!==64){
+    loginStatus.textContent='Could not derive public key. The nsec may be invalid.';return;
+  }
+  nsecPrivkey=hexPriv;
+  nostrUser.pubkey=pubkey;
+  nostrUser.signer='nsec';
+  loginStatus.textContent='Logged in! Loading profile...';
+  loginModal.classList.remove('open');
+  onNostrLogin();
+}
 
 // ── Logout ──
 document.getElementById('nostr-logout-btn').addEventListener('click',function(e){
